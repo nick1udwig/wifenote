@@ -1,18 +1,18 @@
 {
     "name": "wifenote",
     "description": "Notes, powered by tldraw",
-    "image": "",
+    "image": "https://raw.githubusercontent.com/nick1udwig/wifenote/refs/heads/master/assets/wifenote-transparent-cropped.webp",
     "properties": {
         "package_name": "wifenote",
         "current_version": "0.1.0",
         "publisher": "nick.kino",
         "mirrors": ["nickludwig.os", "nick1udwig.os", "diligence.os"],
         "code_hashes": {
-            "0.1.0": ""
+            "0.1.0": "dd59111b07a7a98a04e35476222521e8f0100311920ab0fb79c9b4b48ad63e36"
         },
         "wit_version": 1,
         "dependencies": []
     },
-    "external_url": "",
+    "external_url": "https://github.com/nick1udwig/wifenote",
     "animation_url": ""
 }

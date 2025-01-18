@@ -222,7 +222,7 @@ const FolderView = () => {
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'tldraw-notes-export.json.gz';
+    a.download = 'wifenote-export.json.gz';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

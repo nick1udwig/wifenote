@@ -60,7 +60,7 @@ interface wifenote {
     }
 }
 
-world wifenote-template-dot-os-v0 {
+world wifenote-nick-dot-kino-v0 {
     import wifenote;
     include process-v1;
 }

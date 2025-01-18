@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 
-use crate::kinode::process::kinode_tldraw::{
+use crate::kinode::process::wifenote::{
     Folder, Note, Request as NoteRequest, Response as NoteResponse,
 };
 use kinode_process_lib::{
@@ -14,7 +14,7 @@ use kinode_process_lib::{
 
 wit_bindgen::generate!({
     path: "target/wit",
-    world: "wifenote-template-dot-os-v0",
+    world: "wifenote-nick-dot-kino-v0",
     generate_unused_types: true,
     additional_derives: [serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto],
 });
