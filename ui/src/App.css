@@ -1,0 +1,242 @@
+.app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  background-color: var(--bg-primary);
+}
+
+/* Common styles */
+.toolbar {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--toolbar-bg);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.toolbar button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-primary);
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow);
+}
+
+.toolbar button:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.toolbar button:active {
+  transform: translateY(0);
+}
+
+.toolbar button:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 8px 16px;
+  border-radius: 6px;
+  margin-left: auto;
+  cursor: pointer;
+  font-size: 14px;
+  animation: slideIn 0.3s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error-message {
+    background: #7f1d1d;
+    color: #fecaca;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Folder View specific styles */
+.folder-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+.folder-container {
+  flex: 1;
+  padding: 24px;
+  overflow: auto;
+}
+
+.folder {
+  margin: 8px 0;
+  background: var(--folder-bg);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow);
+}
+
+.folder-header {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.folder-header .minimize-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+}
+
+.folder-header .minimize-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.folder-header span {
+  flex: 1;
+  cursor: move;
+  color: var(--text-primary);
+  font-weight: 500;
+  user-select: none;
+}
+
+.folder-contents {
+  margin-left: 24px;
+  padding: 12px;
+}
+
+.note {
+  margin: 8px 0;
+  padding: 12px;
+  background: var(--note-bg);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow);
+}
+
+.note span {
+  cursor: pointer;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note.root-note {
+  margin-left: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.folder:hover .actions,
+.note:hover .actions {
+  opacity: 1;
+}
+
+.actions button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.actions button:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* TLDraw View specific styles */
+.tldraw-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+}
+
+.tldraw-view .toolbar .note-name {
+  margin-left: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tldraw-canvas {
+  flex: 1;
+  height: 100%;
+}
+
+/* Node not connected message */
+.node-not-connected {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin: 24px;
+}
+
+/* Dragging styles */
+.folder.drag-over,
+.folder-container.drag-over {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary);
+  transition: all 0.2s ease;
+}
+
+.dragging .folder:not(.drag-over) {
+  opacity: 0.6;
+}
+
+.folder-container.dragging {
+  cursor: move;
+}
+
+.folder span[draggable="true"],
+.note[draggable="true"] {
+  cursor: move;
+}
+
+.note[draggable="true"]:active,
+.folder span[draggable="true"]:active {
+  opacity: 0.7;
+}

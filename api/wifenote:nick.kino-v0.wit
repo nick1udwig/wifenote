@@ -1,0 +1,66 @@
+interface wifenote {
+    /// Structure for a folder
+    record folder {
+        id: string,
+        name: string,
+        parent-id: option<string>,
+    }
+
+    /// Structure for a note
+    record note {
+        id: string,
+        name: string,
+        folder-id: option<string>,
+        content: list<u8>,  // serialized tldraw state
+    }
+
+    /// Compressed export data
+    type compressed-bytes = list<u8>;
+
+    variant request {
+        /// Folder operations
+        create-folder(tuple<string, option<string>>),  // (folder name, parent id)
+        rename-folder(tuple<string, string>),  // (folder id, new name)
+        delete-folder(string),  // folder id
+        move-folder(tuple<string, option<string>>), // (folder id, new parent id)
+
+        /// Note operations
+        create-note(tuple<string, option<string>>),  // (note name, folder id)
+        rename-note(tuple<string, string>),  // (note id, new name)
+        delete-note(string),  // note id
+        move-note(tuple<string, option<string>>),  // (note id, new folder id)
+        get-note(string),  // note id
+        update-note-content(tuple<string, list<u8>>),  // (note id, new content)
+
+        /// Tree operations
+        get-structure,  // get full folder/note tree
+        export-all,  // get all data for export
+        import-all(compressed-bytes),  // import compressed data
+    }
+
+    variant response {
+        /// Folder responses
+        create-folder(result<folder, string>),
+        rename-folder(result<folder, string>),
+        delete-folder(result<_, string>),
+        move-folder(result<folder, string>),
+
+        /// Note responses
+        create-note(result<note, string>),
+        rename-note(result<note, string>),
+        delete-note(result<_, string>),
+        move-note(result<note, string>),
+        get-note(result<note, string>),
+        update-note-content(result<_, string>),
+
+        /// Tree responses
+        get-structure(result<tuple<list<folder>, list<note>>, string>),
+        export-all(result<compressed-bytes, string>),
+        import-all(result<_, string>),
+    }
+}
+
+world wifenote-template-dot-os-v0 {
+    import wifenote;
+    include process-v1;
+}
