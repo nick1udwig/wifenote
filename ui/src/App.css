@@ -187,10 +187,14 @@
 /* TLDraw View specific styles */
 .tldraw-view {
   width: 100%;
-  height: 100%;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow: hidden;
 }
 
 .tldraw-view .toolbar .note-name {
@@ -201,7 +205,8 @@
 
 .tldraw-canvas {
   flex: 1;
-  height: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
 /* Node not connected message */
