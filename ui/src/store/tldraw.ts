@@ -122,11 +122,15 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   deleteNote: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      await apiCall({ DeleteNote: [id] });
+      console.log('Deleting note:', id);
+      const result = await apiCall({ DeleteNote: id });
+      console.log('Delete note response:', result);
       set((state) => ({
         notes: state.notes.filter((note) => note.id !== id),
-        currentNote: state.currentNote?.id === id ? undefined : state.currentNote
+        currentNote: state.currentNote?.id === id ? undefined : state.currentNote,
+        view: state.currentNote?.id === id ? 'folder' : state.view
       }));
+      console.log('State updated after delete');
     } catch (error) {
       set({ error: 'Failed to delete note' });
       throw error;
