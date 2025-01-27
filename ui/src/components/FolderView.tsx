@@ -4,12 +4,9 @@ import { CreateFolderRequest, CreateNoteRequest, ImportRequest, MoveFolderReques
 
 const BASE_URL = import.meta.env.BASE_URL;
 
-type NoteType = {
-  id: string;
-  name: string;
-  "folder-id": string | null;
-  content: number[];
-};
+import { TlDrawNote } from '../types/TlDraw';
+
+type NoteType = TlDrawNote;
 
 type FolderType = {
   id: string;
@@ -48,7 +45,7 @@ function isFolderDescendant(folderId: string, targetId: string): boolean {
   return findParentChain(targetId).has(folderId);
 }
 
-const FolderItem = ({
+const FolderItem: React.FC<FolderItemProps> = ({
   folder,
   depth,
   getChildFolders,
@@ -61,8 +58,8 @@ const FolderItem = ({
   setCurrentNote,
   setView,
   renameNote,
-  handleDelete,
-}: FolderItemProps) => {
+  deleteNote,
+}) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const childFolders = getChildFolders(folder.id);
   const childNotes = getChildNotes(folder.id);
@@ -123,28 +120,35 @@ const FolderItem = ({
             draggable
             onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <span onClick={() => {
-              setCurrentNote(note);
-              setView('tldraw');
-            }}>
-              📝 {note.name}
-            </span>
-            <div className="actions">
-              <button onClick={async () => {
-                const name = window.prompt('Enter new name:', note.name);
-                if (name) {
-                  try {
-                    await renameNote(note.id, name);
-                  } catch (e) {
-                    console.error('Failed to rename note:', e);
+            <div 
+              className="note-content"
+              onClick={() => {
+                setCurrentNote(note);
+                setView('tldraw');
+              }}
+            >
+              <div className="note-name">
+                📝 {note.name}
+              </div>
+              <div className="actions">
+                <button onClick={async (e) => {
+                  e.stopPropagation();
+                  const name = window.prompt('Enter new name:', note.name);
+                  if (name) {
+                    try {
+                      await renameNote(note.id, name);
+                    } catch (e) {
+                      console.error('Failed to rename note:', e);
+                    }
                   }
-                }
-              }}>Rename</button>
-              <button onClick={() => {
-                if (window.confirm('Delete this note?')) {
-                  deleteNote(note.id);
-                }
-              }}>Delete</button>
+                }}>Rename</button>
+                <button onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm('Delete this note?')) {
+                    deleteNote(note.id);
+                  }
+                }}>Delete</button>
+              </div>
             </div>
           </div>
         ))}
@@ -153,7 +157,7 @@ const FolderItem = ({
   );
 };
 
-const FolderView = () => {
+const FolderView: React.FC = () => {
   const {
     folders,
     notes,
@@ -254,7 +258,6 @@ const FolderView = () => {
 
     } catch (error) {
       console.error('Import failed:', error);
-      // You can set an error state here to show to the user
       if (error instanceof Error) {
         setError(error.message);
       } else {
@@ -262,18 +265,6 @@ const FolderView = () => {
       }
     }
   };
-
-  const handleDelete = useCallback(async (note: NoteType) => {
-    if (window.confirm('Delete this note?')) {
-      try {
-        await deleteNote(note.id);
-        console.log('Note deleted successfully:', note.id);
-      } catch (e) {
-        console.error('Failed to delete note:', e);
-        setError('Failed to delete note');
-      }
-    }
-  }, [deleteNote, setError]);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
     e.preventDefault();
@@ -416,28 +407,35 @@ const FolderView = () => {
             draggable
             onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <span onClick={() => {
-              setCurrentNote(note);
-              setView('tldraw');
-            }}>
-              📝 {note.name}
-            </span>
-            <div className="actions">
-              <button onClick={async () => {
-                const name = window.prompt('Enter new name:', note.name);
-                if (name) {
-                  try {
-                    await renameNote(note.id, name);
-                  } catch (e) {
-                    console.error('Failed to rename note:', e);
+            <div 
+              className="note-content"
+              onClick={() => {
+                setCurrentNote(note);
+                setView('tldraw');
+              }}
+            >
+              <div className="note-name">
+                📝 {note.name}
+              </div>
+              <div className="actions">
+                <button onClick={async (e) => {
+                  e.stopPropagation();
+                  const name = window.prompt('Enter new name:', note.name);
+                  if (name) {
+                    try {
+                      await renameNote(note.id, name);
+                    } catch (e) {
+                      console.error('Failed to rename note:', e);
+                    }
                   }
-                }
-              }}>Rename</button>
-              <button onClick={() => {
-                if (window.confirm('Delete this note?')) {
-                  deleteNote(note.id);
-                }
-              }}>Delete</button>
+                }}>Rename</button>
+                <button onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm('Delete this note?')) {
+                    deleteNote(note.id);
+                  }
+                }}>Delete</button>
+              </div>
             </div>
           </div>
         ))}

@@ -43,7 +43,8 @@ function App() {
             id: n.id,
             name: n.name,
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
-            content: n.content
+            content: n.content,
+            type: 'tldraw', // Default type for existing notes
           }));
           
           console.log('Initial structure:', { transformedFolders, transformedNotes });
@@ -84,7 +85,8 @@ function App() {
                   id: n.id,
                   name: n.name,
                   'folder-id': n.folder_id, // Convert snake_case to kebab-case
-                  content: n.content
+                  content: n.content,
+                  type: 'tldraw', // Default type for existing notes
                 }));
                 
                 // Re-apply the transform and update state

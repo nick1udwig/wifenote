@@ -39,7 +39,7 @@ export interface GetNoteRequest {
 }
 
 export interface CreateNoteRequest {
-  CreateNote: [string, string | null];
+  CreateNote: [string, string | null, TlDrawNoteType];  // (note name, folder id, note type)
 }
 
 export interface CreateFolderRequest {

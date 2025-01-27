@@ -73,12 +73,12 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   setView: (view) => set({ view }),
   setStructure: (folders, notes) => {
     console.log('Setting structure with:', { folders, notes });
-    set((state) => ({
-      folders,
-      notes,
-      isLoading: false,
-      error: null
-    }));
+      set({
+        folders,
+        notes,
+        isLoading: false,
+        error: null
+      });
   },
   setCurrentNote: (note) => set({ currentNote: note }),
   setDragging: (dragging) => set({ dragging }),
@@ -89,7 +89,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   addNote: async (note) => {
     set({ isLoading: true, error: null });
     try {
-      await apiCall({ CreateNote: [note.name, note["folder-id"]] });
+      await apiCall({ CreateNote: [note.name, note["folder-id"], note.type] });
       set((state) => ({ notes: [...state.notes, note] }));
     } catch (error) {
       set({ error: 'Failed to add note' });
@@ -103,12 +103,16 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       // Optimistic update
+      const existingNote = get().notes.find(note => note.id === id);
+      if (!existingNote) throw new Error('Note not found');
+
+      const updatedNote = { ...existingNote, ...updates };
       set((state) => ({
         notes: state.notes.map((note) =>
-          note.id === id ? { ...note, ...updates } : note
+          note.id === id ? updatedNote : note
         ),
         currentNote: state.currentNote?.id === id
-          ? { ...state.currentNote, ...updates }
+          ? updatedNote
           : state.currentNote
       }));
 
