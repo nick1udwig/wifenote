@@ -86,8 +86,9 @@ function App() {
                   content: n.content
                 }));
                 
+                // Re-apply the transform and update state
                 setStructure(transformedFolders, transformedNotes);
-                console.log('set structure with:', { transformedFolders, transformedNotes });
+                console.log('Set structure with:', { transformedFolders, transformedNotes });
               }
             }
           } catch (error) {

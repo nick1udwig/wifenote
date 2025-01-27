@@ -71,7 +71,15 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   // Basic setters
   set: (updates) => set(updates),
   setView: (view) => set({ view }),
-  setStructure: (folders, notes) => set({ folders, notes }),
+  setStructure: (folders, notes) => {
+    console.log('Setting structure with:', { folders, notes });
+    set((state) => ({
+      folders,
+      notes,
+      isLoading: false,
+      error: null
+    }));
+  },
   setCurrentNote: (note) => set({ currentNote: note }),
   setDragging: (dragging) => set({ dragging }),
   setError: (error) => set({ error }),
