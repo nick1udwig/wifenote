@@ -1,0 +1,35 @@
+.tldraw-view {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+.tldraw-view .toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  background: rgba(var(--toolbar-bg-rgb), 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--shadow);
+}
+
+.tldraw-view .toolbar .note-name {
+  margin-left: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tldraw-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
