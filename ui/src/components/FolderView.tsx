@@ -61,7 +61,7 @@ const FolderItem = ({
   setCurrentNote,
   setView,
   renameNote,
-  deleteNote,
+  handleDelete,
 }: FolderItemProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const childFolders = getChildFolders(folder.id);
@@ -189,11 +189,11 @@ const FolderView = () => {
     if (!response.ok) throw new Error('Failed to create folder');
   };
 
-  const handleCreateNote = async () => {
+  const handleCreateNote = async (type: 'tldraw' | 'markdown' = 'tldraw') => {
     const name = window.prompt('Enter note name:');
     if (!name) return;
 
-    const request: CreateNoteRequest = { CreateNote: [name, null] };
+    const request: CreateNoteRequest = { CreateNote: [name, null, type] };
     const response = await fetch(`${BASE_URL}/api`, {
       method: 'POST',
       body: JSON.stringify(request),
@@ -262,6 +262,18 @@ const FolderView = () => {
       }
     }
   };
+
+  const handleDelete = useCallback(async (note: NoteType) => {
+    if (window.confirm('Delete this note?')) {
+      try {
+        await deleteNote(note.id);
+        console.log('Note deleted successfully:', note.id);
+      } catch (e) {
+        console.error('Failed to delete note:', e);
+        setError('Failed to delete note');
+      }
+    }
+  }, [deleteNote, setError]);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
     e.preventDefault();
@@ -354,8 +366,11 @@ const FolderView = () => {
         <button onClick={handleCreateFolder} disabled={isLoading}>
           {isLoading ? '...' : 'New Folder'}
         </button>
-        <button onClick={handleCreateNote} disabled={isLoading}>
-          {isLoading ? '...' : 'New Note'}
+        <button onClick={() => handleCreateNote('tldraw')} disabled={isLoading}>
+          {isLoading ? '...' : 'New Drawing'}
+        </button>
+        <button onClick={() => handleCreateNote('markdown')} disabled={isLoading}>
+          {isLoading ? '...' : 'New Markdown'}
         </button>
         <button onClick={handleExport} disabled={isLoading}>
           {isLoading ? '...' : 'Export'}

@@ -13,10 +13,13 @@ export interface ApiFolder {
 }
 
 // UI types (kebab-case)
+export type TlDrawNoteType = 'tldraw' | 'markdown';
+
 export interface TlDrawNote {
   id: string;
   name: string;
   "folder-id": string | null;
+  type: TlDrawNoteType;
   content: number[];
 }
 

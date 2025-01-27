@@ -4,6 +4,7 @@ import "./App.css"
 import useTlDrawStore from "./store/tldraw"
 import FolderView from "./components/FolderView"
 import TldrawView from "./components/TldrawView"
+import MarkdownView from "./components/MarkdownView"
 import { StructureResponse, ApiFolder, ApiNote, TlDrawFolder, TlDrawNote } from "./types/TlDraw"
 
 const BASE_URL = import.meta.env.BASE_URL
@@ -16,7 +17,7 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined
 
 function App() {
-  const { view, setStructure } = useTlDrawStore()
+  const { view, currentNote, setStructure } = useTlDrawStore()
   const [nodeConnected, setNodeConnected] = useState(true)
 
   useEffect(() => {
@@ -115,7 +116,13 @@ function App() {
 
   return (
     <div className="app">
-      {view === 'folder' ? <FolderView /> : <TldrawView />}
+      {view === 'folder' ? (
+        <FolderView />
+      ) : currentNote?.type === 'markdown' ? (
+        <MarkdownView />
+      ) : (
+        <TldrawView />
+      )}
     </div>
   )
 }
