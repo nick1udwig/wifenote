@@ -24,12 +24,12 @@ const NoteItem: React.FC<NoteItemProps> = ({
       draggable
       onDragStart={onDragStart}
     >
-      <div 
+      <div
         className="note-content"
         onClick={() => onSelect(note)}
       >
         <div className="note-name">
-          {note.type === 'markdown' ? '📝' : '✏️'} {note.name}
+          {note.type === 'Markdown' ? '📝' : '✏️'} {note.name}
         </div>
         <div className="actions">
           <button onClick={async (e) => {

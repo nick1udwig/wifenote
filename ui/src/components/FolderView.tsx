@@ -120,7 +120,7 @@ const FolderItem: React.FC<FolderItemProps> = ({
             draggable
             onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <div 
+            <div
               className="note-content"
               onClick={() => {
                 setCurrentNote(note);
@@ -176,7 +176,11 @@ const FolderView: React.FC = () => {
     deleteNote,
     moveNote,
     moveFolder,
+    setStructure,
+    set: setStore,
   } = useTlDrawStore();
+
+  const setLoading = (loading: boolean) => setStore({ isLoading: loading });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -193,17 +197,56 @@ const FolderView: React.FC = () => {
     if (!response.ok) throw new Error('Failed to create folder');
   };
 
-  const handleCreateNote = async (type: 'tldraw' | 'markdown' = 'tldraw') => {
+  const handleCreateNote = async (type: 'Tldraw' | 'Markdown' = 'Tldraw') => {
     const name = window.prompt('Enter note name:');
     if (!name) return;
 
-    const request: CreateNoteRequest = { CreateNote: [name, null, type] };
-    const response = await fetch(`${BASE_URL}/api`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
+    try {
+      setError(null);
+      setLoading(true);
+      const request: CreateNoteRequest = { CreateNote: [name, null, type] };
+      const response = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
 
-    if (!response.ok) throw new Error('Failed to create note');
+      if (!response.ok) throw new Error('Failed to create note');
+
+      // Request the updated structure after creating a note
+      const structureResponse = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: '"GetStructure"',
+      });
+
+      if (!structureResponse.ok) throw new Error('Failed to get updated structure');
+
+      const data = await structureResponse.json();
+      if ('GetStructure' in data && 'Ok' in data.GetStructure) {
+        const [folders, notes] = data.GetStructure.Ok;
+
+        // Transform the data to match expected format
+        const transformedFolders = folders.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          'parent-id': f.parent_id
+        }));
+
+        const transformedNotes = notes.map((n: any): TlDrawNote => ({
+          id: n.id,
+          name: n.name,
+          'folder-id': n.folder_id,
+          content: n.content,
+          type: n.type || 'Tldraw'
+        }));
+
+        setStructure(transformedFolders, transformedNotes);
+      }
+    } catch (error) {
+      console.error('Create note failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to create note');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExport = async () => {
@@ -357,10 +400,10 @@ const FolderView: React.FC = () => {
         <button onClick={handleCreateFolder} disabled={isLoading}>
           {isLoading ? '...' : 'New Folder'}
         </button>
-        <button onClick={() => handleCreateNote('tldraw')} disabled={isLoading}>
+        <button onClick={() => handleCreateNote('Tldraw')} disabled={isLoading}>
           {isLoading ? '...' : 'New Drawing'}
         </button>
-        <button onClick={() => handleCreateNote('markdown')} disabled={isLoading}>
+        <button onClick={() => handleCreateNote('Markdown')} disabled={isLoading}>
           {isLoading ? '...' : 'New Markdown'}
         </button>
         <button onClick={handleExport} disabled={isLoading}>
@@ -407,7 +450,7 @@ const FolderView: React.FC = () => {
             draggable
             onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <div 
+            <div
               className="note-content"
               onClick={() => {
                 setCurrentNote(note);

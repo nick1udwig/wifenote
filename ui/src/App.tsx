@@ -31,22 +31,22 @@ function App() {
         const structure = data.GetStructure;
         if ('Ok' in structure) {
           const [folders, notes] = structure.Ok;
-          
+
           // Transform the data to match expected format
           const transformedFolders = (folders as ApiFolder[]).map((f: ApiFolder): TlDrawFolder => ({
             id: f.id,
             name: f.name,
             'parent-id': f.parent_id // Convert snake_case to kebab-case
           }));
-          
+
           const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
             id: n.id,
             name: n.name,
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
             content: n.content,
-            type: 'tldraw', // Default type for existing notes
+            type: n.note_type || 'Tldraw', // Use the type from backend or default to tldraw
           }));
-          
+
           console.log('Initial structure:', { transformedFolders, transformedNotes });
           setStructure(transformedFolders, transformedNotes);
         }
@@ -67,28 +67,28 @@ function App() {
             // Parse the message if it's a string
             const data = typeof message === 'string' ? JSON.parse(message) : message;
             console.log("WebSocket received message", data);
-            
+
             // Handle real-time updates
             if (data && typeof data === 'object' && 'GetStructure' in data) {
               const structure = data.GetStructure;
               if ('Ok' in structure) {
                 const [folders, notes] = structure.Ok;
-                
+
                 // Transform the data to match expected format
                 const transformedFolders = (folders as ApiFolder[]).map((f: ApiFolder): TlDrawFolder => ({
                   id: f.id,
                   name: f.name,
                   'parent-id': f.parent_id // Convert snake_case to kebab-case
                 }));
-                
+
                 const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
                   id: n.id,
                   name: n.name,
                   'folder-id': n.folder_id, // Convert snake_case to kebab-case
                   content: n.content,
-                  type: 'tldraw', // Default type for existing notes
+                  type: n.note_type || 'Tldraw',  // Use backend type or default to tldraw
                 }));
-                
+
                 // Re-apply the transform and update state
                 setStructure(transformedFolders, transformedNotes);
                 console.log('Set structure with:', { transformedFolders, transformedNotes });
@@ -120,7 +120,7 @@ function App() {
     <div className="app">
       {view === 'folder' ? (
         <FolderView />
-      ) : currentNote?.type === 'markdown' ? (
+      ) : currentNote?.type === 'Markdown' ? (
         <MarkdownView />
       ) : (
         <TldrawView />
