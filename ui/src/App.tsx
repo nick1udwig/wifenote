@@ -44,7 +44,7 @@ function App() {
             name: n.name,
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
             content: n.content,
-            type: n.note_type || 'Tldraw', // Use the type from backend or default to tldraw
+            type: n.note_type || 'Tldraw', // Use lowercase type from backend
           }));
 
           console.log('Initial structure:', { transformedFolders, transformedNotes });
@@ -86,7 +86,7 @@ function App() {
                   name: n.name,
                   'folder-id': n.folder_id, // Convert snake_case to kebab-case
                   content: n.content,
-                  type: n.note_type || 'Tldraw',  // Use backend type or default to tldraw
+                  type: n.note_type || 'Tldraw',
                 }));
 
                 // Re-apply the transform and update state

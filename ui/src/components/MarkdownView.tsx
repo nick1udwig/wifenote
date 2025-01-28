@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
+import './MarkdownView.css';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
@@ -69,11 +70,11 @@ const MarkdownView: React.FC = () => {
   return (
     <div className="markdown-view">
       <div className="toolbar">
-        <button onClick={() => setView('folder')}>← Back to Folders</button>
         <span className="note-name">{currentNote?.name}</span>
         <button onClick={() => setPreview(!preview)}>
           {preview ? 'Edit' : 'Preview'}
         </button>
+        <button onClick={() => setView('folder')}>← Back to Folders</button>
       </div>
       <div className="markdown-content">
         {preview ? (
@@ -88,6 +89,7 @@ const MarkdownView: React.FC = () => {
             placeholder="Type your markdown here..."
             spellCheck={false}
             autoFocus
+            style={{ fontSize: '16px' }}
           />
         )}
       </div>

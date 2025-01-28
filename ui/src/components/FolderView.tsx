@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import { CreateFolderRequest, CreateNoteRequest, ImportRequest, MoveFolderRequest, MoveNoteRequest } from '../types/TlDraw';
+import NoteItem from './NoteItem';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
@@ -86,10 +87,18 @@ const FolderItem: React.FC<FolderItemProps> = ({
       }}
     >
       <div className="folder-header">
-        <span
-          draggable
-          onDragStart={() => setDragging({ type: 'folder', id: folder.id })}
-        >
+          <span
+            draggable
+            onDragStart={() => setDragging({ type: 'folder', id: folder.id })}
+            onTouchStart={(e) => {
+              // Enable drag on touch devices by simulating dragstart
+              const target = e.currentTarget as HTMLElement;
+              (target as any).draggable = true;
+              const event = new Event('dragstart', { bubbles: true });
+              target.dispatchEvent(event);
+              setDragging({ type: 'folder', id: folder.id });
+            }}
+          >
           📁 {folder.name}
         </span>
         <div className="actions">
@@ -116,40 +125,26 @@ const FolderItem: React.FC<FolderItemProps> = ({
         {childNotes.map((note) => (
           <div
             key={note.id}
-            className="note"
-            draggable
-            onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <div
-              className="note-content"
-              onClick={() => {
+            <NoteItem
+              note={note}
+              onSelect={() => {
                 setCurrentNote(note);
                 setView('tldraw');
               }}
-            >
-              <div className="note-name">
-                📝 {note.name}
-              </div>
-              <div className="actions">
-                <button onClick={async (e) => {
-                  e.stopPropagation();
-                  const name = window.prompt('Enter new name:', note.name);
-                  if (name) {
-                    try {
-                      await renameNote(note.id, name);
-                    } catch (e) {
-                      console.error('Failed to rename note:', e);
-                    }
-                  }
-                }}>Rename</button>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.confirm('Delete this note?')) {
-                    deleteNote(note.id);
-                  }
-                }}>Delete</button>
-              </div>
-            </div>
+              onDragStart={() => setDragging({ type: 'note', id: note.id })}
+              onRename={async (id: string, name: string) => {
+                await renameNote(id, name);
+              }}
+              onDelete={deleteNote}
+              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => {
+                const target = e.currentTarget as HTMLDivElement;
+                (target as any).draggable = true;
+                const event = new Event('dragstart', { bubbles: true });
+                target.dispatchEvent(event);
+                setDragging({ type: 'note', id: note.id });
+              }}
+            />
           </div>
         ))}
       </div>
@@ -397,20 +392,49 @@ const FolderView: React.FC = () => {
   return (
     <div className="folder-view">
       <div className="toolbar">
-        <button onClick={handleCreateFolder} disabled={isLoading}>
-          {isLoading ? '...' : 'New Folder'}
+        <button onClick={handleCreateFolder} disabled={isLoading} title="New Folder">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">folder</span>
+            </>
+          )}
         </button>
-        <button onClick={() => handleCreateNote('Tldraw')} disabled={isLoading}>
-          {isLoading ? '...' : 'New Drawing'}
+          <button onClick={() => handleCreateNote('Tldraw')} disabled={isLoading} title="New Drawing">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">draw</span>
+            </>
+          )}
         </button>
-        <button onClick={() => handleCreateNote('Markdown')} disabled={isLoading}>
-          {isLoading ? '...' : 'New Markdown'}
+          <button onClick={() => handleCreateNote('Markdown')} disabled={isLoading} title="New Markdown">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">description</span>
+            </>
+          )}
         </button>
-        <button onClick={handleExport} disabled={isLoading}>
-          {isLoading ? '...' : 'Export'}
+        <button onClick={handleExport} disabled={isLoading} title="Export">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <span className="material-icons">upload</span>
+          )}
         </button>
-        <button onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-          {isLoading ? '...' : 'Import'}
+        <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} title="Import">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <span className="material-icons">download</span>
+          )}
         </button>
         <input
           ref={fileInputRef}
@@ -446,40 +470,27 @@ const FolderView: React.FC = () => {
         {getChildNotes(null).map((note) => (
           <div
             key={note.id}
-            className="note root-note"
-            draggable
-            onDragStart={() => setDragging({ type: 'note', id: note.id })}
+            className="root-note"
           >
-            <div
-              className="note-content"
-              onClick={() => {
+            <NoteItem
+              note={note}
+              onSelect={() => {
                 setCurrentNote(note);
                 setView('tldraw');
               }}
-            >
-              <div className="note-name">
-                📝 {note.name}
-              </div>
-              <div className="actions">
-                <button onClick={async (e) => {
-                  e.stopPropagation();
-                  const name = window.prompt('Enter new name:', note.name);
-                  if (name) {
-                    try {
-                      await renameNote(note.id, name);
-                    } catch (e) {
-                      console.error('Failed to rename note:', e);
-                    }
-                  }
-                }}>Rename</button>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.confirm('Delete this note?')) {
-                    deleteNote(note.id);
-                  }
-                }}>Delete</button>
-              </div>
-            </div>
+              onDragStart={() => setDragging({ type: 'note', id: note.id })}
+              onRename={async (id: string, name: string) => {
+                await renameNote(id, name);
+              }}
+              onDelete={deleteNote}
+              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => {
+                const target = e.currentTarget as HTMLDivElement;
+                (target as any).draggable = true;
+                const event = new Event('dragstart', { bubbles: true });
+                target.dispatchEvent(event);
+                setDragging({ type: 'note', id: note.id });
+              }}
+            />
           </div>
         ))}
       </div>
