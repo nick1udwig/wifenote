@@ -68,4 +68,76 @@
   overflow-y: auto;
   background: var(--bg-primary);
   color: var(--text-primary);
+  line-height: 1.6;
+}
+
+/* Markdown content styling */
+.preview-pane h1,
+.preview-pane h2,
+.preview-pane h3,
+.preview-pane h4,
+.preview-pane h5,
+.preview-pane h6 {
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+  font-weight: 600;
+}
+
+.preview-pane h1 { font-size: 2em; }
+.preview-pane h2 { font-size: 1.5em; }
+.preview-pane h3 { font-size: 1.25em; }
+
+.preview-pane p {
+  margin-bottom: 1em;
+}
+
+.preview-pane ul,
+.preview-pane ol {
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+.preview-pane li {
+  margin-bottom: 0.5em;
+}
+
+.preview-pane code {
+  background: var(--bg-secondary);
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+.preview-pane pre {
+  background: var(--bg-secondary);
+  padding: 1em;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.preview-pane pre code {
+  background: none;
+  padding: 0;
+}
+
+.preview-pane blockquote {
+  border-left: 4px solid var(--border-color);
+  padding-left: 1em;
+  margin: 1em 0;
+  color: var(--text-secondary);
+}
+
+.preview-pane a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.preview-pane a:hover {
+  text-decoration: underline;
+}
+
+.preview-pane img {
+  max-width: 100%;
+  height: auto;
 }

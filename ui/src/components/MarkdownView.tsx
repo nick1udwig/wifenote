@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
+import ReactMarkdown from 'react-markdown';
 import './MarkdownView.css';
 
 const BASE_URL = import.meta.env.BASE_URL;
@@ -79,8 +80,7 @@ const MarkdownView: React.FC = () => {
       <div className="markdown-content">
         {preview ? (
           <div className="preview-pane">
-            {/* Use a markdown renderer here */}
-            <pre>{content}</pre>
+            <ReactMarkdown>{content}</ReactMarkdown>
           </div>
         ) : (
           <textarea
