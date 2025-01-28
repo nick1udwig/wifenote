@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import { CreateFolderRequest, CreateNoteRequest, ImportRequest, MoveFolderRequest, MoveNoteRequest } from '../types/TlDraw';
 import NoteItem from './NoteItem';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
@@ -102,21 +103,33 @@ const FolderItem: React.FC<FolderItemProps> = ({
           📁 {folder.name}
         </span>
         <div className="actions">
-          <button onClick={async () => {
-            const name = window.prompt('Enter new name:', folder.name);
-            if (name) {
-              try {
-                await renameFolder(folder.id, name);
-              } catch (e) {
-                console.error('Failed to rename folder:', e);
+          <button
+            className="icon-button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const name = window.prompt('Enter new name:', folder.name);
+              if (name) {
+                try {
+                  await renameFolder(folder.id, name);
+                } catch (e) {
+                  console.error('Failed to rename folder:', e);
+                }
               }
-            }
-          }}>Rename</button>
-          <button onClick={() => {
-            if (window.confirm('Delete this folder?')) {
-              deleteFolder(folder.id);
-            }
-          }}>Delete</button>
+            }}
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm('Delete this folder?')) {
+                deleteFolder(folder.id);
+              }
+            }}
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
       </div>
 
