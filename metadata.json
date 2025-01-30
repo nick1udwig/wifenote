@@ -4,12 +4,11 @@
     "image": "https://raw.githubusercontent.com/nick1udwig/wifenote/refs/heads/master/assets/wifenote-transparent-cropped.webp",
     "properties": {
         "package_name": "wifenote",
-        "current_version": "0.1.1",
+        "current_version": "0.1.2",
         "publisher": "nick.kino",
-        "mirrors": ["nickludwig.os", "nick1udwig.os", "diligence.os"],
+        "mirrors": ["nick.kino", "nick1udwig.os", "yael-solutions.os", "diligence.os"],
         "code_hashes": {
-            "0.1.1": "a5df5eec81cb3d786d71167304333b415afaf055bbaf9c08910b9ced21904d44",
-            "0.1.0": "dd59111b07a7a98a04e35476222521e8f0100311920ab0fb79c9b4b48ad63e36"
+            "0.1.2": "970426ccb5e25a5bbef8ed0ddb67b3bd5f2929b4657a0a93efe4afb0b069a6d5"
         },
         "wit_version": 1,
         "dependencies": []

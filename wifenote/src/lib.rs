@@ -478,9 +478,7 @@ fn init(our: Address) {
     let mut server = http::server::HttpServer::new(5);
     let config = http::server::HttpBindingConfig::new(false, false, false, None);
     server.bind_http_path("/api", config.clone()).unwrap();
-    server
-        .serve_ui(&our, "ui", vec!["/"], config.clone())
-        .unwrap();
+    server.serve_ui("ui", vec!["/"], config.clone()).unwrap();
     server
         .bind_ws_path("/", http::server::WsBindingConfig::new(false, false, false))
         .unwrap();
