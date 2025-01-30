@@ -6,12 +6,19 @@ interface wifenote {
         parent-id: option<string>,
     }
 
+    /// Type of note
+    enum note-type {
+        tldraw,
+        markdown,
+    }
+
     /// Structure for a note
     record note {
         id: string,
         name: string,
         folder-id: option<string>,
-        content: list<u8>,  // serialized tldraw state
+        note-type: note-type,
+        content: list<u8>,  // serialized tldraw state or markdown text
     }
 
     /// Compressed export data
@@ -25,7 +32,7 @@ interface wifenote {
         move-folder(tuple<string, option<string>>), // (folder id, new parent id)
 
         /// Note operations
-        create-note(tuple<string, option<string>>),  // (note name, folder id)
+        create-note(tuple<string, option<string>, note-type>),  // (note name, folder id, note type)
         rename-note(tuple<string, string>),  // (note id, new name)
         delete-note(string),  // note id
         move-note(tuple<string, option<string>>),  // (note id, new folder id)

@@ -265,7 +265,7 @@ fn handle_note_request(req: NoteRequest, state: &mut State) -> anyhow::Result<No
             }
         }
 
-        NoteRequest::CreateNote((name, folder_id)) => {
+        NoteRequest::CreateNote((name, folder_id, note_type)) => {
             // Validate folder exists if some
             if let Some(ref folder_id) = folder_id {
                 if !state.folders.contains_key(folder_id) {
@@ -280,7 +280,8 @@ fn handle_note_request(req: NoteRequest, state: &mut State) -> anyhow::Result<No
                 id: id.clone(),
                 name,
                 folder_id: folder_id.clone(),
-                content: vec![], // Empty tldraw canvas
+                note_type,
+                content: vec![], // Empty content
             };
 
             state.notes.insert(id.clone(), note.clone());

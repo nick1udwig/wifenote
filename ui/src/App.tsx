@@ -4,6 +4,7 @@ import "./App.css"
 import useTlDrawStore from "./store/tldraw"
 import FolderView from "./components/FolderView"
 import TldrawView from "./components/TldrawView"
+import MarkdownView from "./components/MarkdownView"
 import { StructureResponse, ApiFolder, ApiNote, TlDrawFolder, TlDrawNote } from "./types/TlDraw"
 
 const BASE_URL = import.meta.env.BASE_URL
@@ -16,7 +17,7 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined
 
 function App() {
-  const { view, setStructure } = useTlDrawStore()
+  const { view, currentNote, setStructure } = useTlDrawStore()
   const [nodeConnected, setNodeConnected] = useState(true)
 
   useEffect(() => {
@@ -30,21 +31,22 @@ function App() {
         const structure = data.GetStructure;
         if ('Ok' in structure) {
           const [folders, notes] = structure.Ok;
-          
+
           // Transform the data to match expected format
           const transformedFolders = (folders as ApiFolder[]).map((f: ApiFolder): TlDrawFolder => ({
             id: f.id,
             name: f.name,
             'parent-id': f.parent_id // Convert snake_case to kebab-case
           }));
-          
+
           const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
             id: n.id,
             name: n.name,
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
-            content: n.content
+            content: n.content,
+            type: n.note_type || 'Tldraw', // Use lowercase type from backend
           }));
-          
+
           console.log('Initial structure:', { transformedFolders, transformedNotes });
           setStructure(transformedFolders, transformedNotes);
         }
@@ -65,29 +67,31 @@ function App() {
             // Parse the message if it's a string
             const data = typeof message === 'string' ? JSON.parse(message) : message;
             console.log("WebSocket received message", data);
-            
+
             // Handle real-time updates
             if (data && typeof data === 'object' && 'GetStructure' in data) {
               const structure = data.GetStructure;
               if ('Ok' in structure) {
                 const [folders, notes] = structure.Ok;
-                
+
                 // Transform the data to match expected format
                 const transformedFolders = (folders as ApiFolder[]).map((f: ApiFolder): TlDrawFolder => ({
                   id: f.id,
                   name: f.name,
                   'parent-id': f.parent_id // Convert snake_case to kebab-case
                 }));
-                
+
                 const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
                   id: n.id,
                   name: n.name,
                   'folder-id': n.folder_id, // Convert snake_case to kebab-case
-                  content: n.content
+                  content: n.content,
+                  type: n.note_type || 'Tldraw',
                 }));
-                
+
+                // Re-apply the transform and update state
                 setStructure(transformedFolders, transformedNotes);
-                console.log('set structure with:', { transformedFolders, transformedNotes });
+                console.log('Set structure with:', { transformedFolders, transformedNotes });
               }
             }
           } catch (error) {
@@ -114,7 +118,13 @@ function App() {
 
   return (
     <div className="app">
-      {view === 'folder' ? <FolderView /> : <TldrawView />}
+      {view === 'folder' ? (
+        <FolderView />
+      ) : currentNote?.type === 'Markdown' ? (
+        <MarkdownView />
+      ) : (
+        <TldrawView />
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ export interface ApiNote {
   name: string;
   folder_id: string | null;
   content: number[];
+  note_type: 'Tldraw' | 'Markdown';
 }
 
 export interface ApiFolder {
@@ -13,10 +14,13 @@ export interface ApiFolder {
 }
 
 // UI types (kebab-case)
+export type TlDrawNoteType = 'Tldraw' | 'Markdown';
+
 export interface TlDrawNote {
   id: string;
   name: string;
   "folder-id": string | null;
+  type: TlDrawNoteType;
   content: number[];
 }
 
@@ -36,7 +40,7 @@ export interface GetNoteRequest {
 }
 
 export interface CreateNoteRequest {
-  CreateNote: [string, string | null];
+  CreateNote: [string, string | null, TlDrawNoteType];  // (note name, folder id, note type)
 }
 
 export interface CreateFolderRequest {

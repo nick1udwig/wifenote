@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import './TldrawView.css';
 import { 
   Tldraw, 
   TLUiEventHandler,
@@ -91,8 +92,8 @@ const TldrawView: React.FC = () => {
   return (
     <div className="tldraw-view">
       <div className="toolbar">
-        <button onClick={() => setView('folder')}>← Back to Folders</button>
         <span className="note-name">{currentNote?.name}</span>
+        <button onClick={() => setView('folder')}>← Back to Folders</button>
       </div>
       <div className="tldraw-canvas">
         <Tldraw

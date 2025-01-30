@@ -1,15 +1,14 @@
 import React, { useCallback, useRef, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import { CreateFolderRequest, CreateNoteRequest, ImportRequest, MoveFolderRequest, MoveNoteRequest } from '../types/TlDraw';
+import NoteItem from './NoteItem';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
-type NoteType = {
-  id: string;
-  name: string;
-  "folder-id": string | null;
-  content: number[];
-};
+import { TlDrawNote } from '../types/TlDraw';
+
+type NoteType = TlDrawNote;
 
 type FolderType = {
   id: string;
@@ -48,7 +47,7 @@ function isFolderDescendant(folderId: string, targetId: string): boolean {
   return findParentChain(targetId).has(folderId);
 }
 
-const FolderItem = ({
+const FolderItem: React.FC<FolderItemProps> = ({
   folder,
   depth,
   getChildFolders,
@@ -62,7 +61,7 @@ const FolderItem = ({
   setView,
   renameNote,
   deleteNote,
-}: FolderItemProps) => {
+}) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const childFolders = getChildFolders(folder.id);
   const childNotes = getChildNotes(folder.id);
@@ -89,28 +88,48 @@ const FolderItem = ({
       }}
     >
       <div className="folder-header">
-        <span
-          draggable
-          onDragStart={() => setDragging({ type: 'folder', id: folder.id })}
-        >
+          <span
+            draggable
+            onDragStart={() => setDragging({ type: 'folder', id: folder.id })}
+            onTouchStart={(e) => {
+              // Enable drag on touch devices by simulating dragstart
+              const target = e.currentTarget as HTMLElement;
+              (target as any).draggable = true;
+              const event = new Event('dragstart', { bubbles: true });
+              target.dispatchEvent(event);
+              setDragging({ type: 'folder', id: folder.id });
+            }}
+          >
           📁 {folder.name}
         </span>
         <div className="actions">
-          <button onClick={async () => {
-            const name = window.prompt('Enter new name:', folder.name);
-            if (name) {
-              try {
-                await renameFolder(folder.id, name);
-              } catch (e) {
-                console.error('Failed to rename folder:', e);
+          <button
+            className="icon-button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const name = window.prompt('Enter new name:', folder.name);
+              if (name) {
+                try {
+                  await renameFolder(folder.id, name);
+                } catch (e) {
+                  console.error('Failed to rename folder:', e);
+                }
               }
-            }
-          }}>Rename</button>
-          <button onClick={() => {
-            if (window.confirm('Delete this folder?')) {
-              deleteFolder(folder.id);
-            }
-          }}>Delete</button>
+            }}
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm('Delete this folder?')) {
+                deleteFolder(folder.id);
+              }
+            }}
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
       </div>
 
@@ -119,33 +138,26 @@ const FolderItem = ({
         {childNotes.map((note) => (
           <div
             key={note.id}
-            className="note"
-            draggable
-            onDragStart={() => setDragging({ type: 'note', id: note.id })}
           >
-            <span onClick={() => {
-              setCurrentNote(note);
-              setView('tldraw');
-            }}>
-              📝 {note.name}
-            </span>
-            <div className="actions">
-              <button onClick={async () => {
-                const name = window.prompt('Enter new name:', note.name);
-                if (name) {
-                  try {
-                    await renameNote(note.id, name);
-                  } catch (e) {
-                    console.error('Failed to rename note:', e);
-                  }
-                }
-              }}>Rename</button>
-              <button onClick={() => {
-                if (window.confirm('Delete this note?')) {
-                  deleteNote(note.id);
-                }
-              }}>Delete</button>
-            </div>
+            <NoteItem
+              note={note}
+              onSelect={() => {
+                setCurrentNote(note);
+                setView('tldraw');
+              }}
+              onDragStart={() => setDragging({ type: 'note', id: note.id })}
+              onRename={async (id: string, name: string) => {
+                await renameNote(id, name);
+              }}
+              onDelete={deleteNote}
+              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => {
+                const target = e.currentTarget as HTMLDivElement;
+                (target as any).draggable = true;
+                const event = new Event('dragstart', { bubbles: true });
+                target.dispatchEvent(event);
+                setDragging({ type: 'note', id: note.id });
+              }}
+            />
           </div>
         ))}
       </div>
@@ -153,7 +165,7 @@ const FolderItem = ({
   );
 };
 
-const FolderView = () => {
+const FolderView: React.FC = () => {
   const {
     folders,
     notes,
@@ -172,7 +184,11 @@ const FolderView = () => {
     deleteNote,
     moveNote,
     moveFolder,
+    setStructure,
+    set: setStore,
   } = useTlDrawStore();
+
+  const setLoading = (loading: boolean) => setStore({ isLoading: loading });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -189,17 +205,56 @@ const FolderView = () => {
     if (!response.ok) throw new Error('Failed to create folder');
   };
 
-  const handleCreateNote = async () => {
+  const handleCreateNote = async (type: 'Tldraw' | 'Markdown' = 'Tldraw') => {
     const name = window.prompt('Enter note name:');
     if (!name) return;
 
-    const request: CreateNoteRequest = { CreateNote: [name, null] };
-    const response = await fetch(`${BASE_URL}/api`, {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
+    try {
+      setError(null);
+      setLoading(true);
+      const request: CreateNoteRequest = { CreateNote: [name, null, type] };
+      const response = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
 
-    if (!response.ok) throw new Error('Failed to create note');
+      if (!response.ok) throw new Error('Failed to create note');
+
+      // Request the updated structure after creating a note
+      const structureResponse = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: '"GetStructure"',
+      });
+
+      if (!structureResponse.ok) throw new Error('Failed to get updated structure');
+
+      const data = await structureResponse.json();
+      if ('GetStructure' in data && 'Ok' in data.GetStructure) {
+        const [folders, notes] = data.GetStructure.Ok;
+
+        // Transform the data to match expected format
+        const transformedFolders = folders.map((f: any) => ({
+          id: f.id,
+          name: f.name,
+          'parent-id': f.parent_id
+        }));
+
+        const transformedNotes = notes.map((n: any): TlDrawNote => ({
+          id: n.id,
+          name: n.name,
+          'folder-id': n.folder_id,
+          content: n.content,
+          type: n.type || 'Tldraw'
+        }));
+
+        setStructure(transformedFolders, transformedNotes);
+      }
+    } catch (error) {
+      console.error('Create note failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to create note');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleExport = async () => {
@@ -254,7 +309,6 @@ const FolderView = () => {
 
     } catch (error) {
       console.error('Import failed:', error);
-      // You can set an error state here to show to the user
       if (error instanceof Error) {
         setError(error.message);
       } else {
@@ -351,17 +405,49 @@ const FolderView = () => {
   return (
     <div className="folder-view">
       <div className="toolbar">
-        <button onClick={handleCreateFolder} disabled={isLoading}>
-          {isLoading ? '...' : 'New Folder'}
+        <button onClick={handleCreateFolder} disabled={isLoading} title="New Folder">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">folder</span>
+            </>
+          )}
         </button>
-        <button onClick={handleCreateNote} disabled={isLoading}>
-          {isLoading ? '...' : 'New Note'}
+          <button onClick={() => handleCreateNote('Tldraw')} disabled={isLoading} title="New Drawing">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">draw</span>
+            </>
+          )}
         </button>
-        <button onClick={handleExport} disabled={isLoading}>
-          {isLoading ? '...' : 'Export'}
+          <button onClick={() => handleCreateNote('Markdown')} disabled={isLoading} title="New Markdown">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <>
+              <span className="material-icons new">add</span>
+              <span className="material-icons">description</span>
+            </>
+          )}
         </button>
-        <button onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
-          {isLoading ? '...' : 'Import'}
+        <button onClick={handleExport} disabled={isLoading} title="Export">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <span className="material-icons">upload</span>
+          )}
+        </button>
+        <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} title="Import">
+          {isLoading ? (
+            <span className="material-icons">sync</span>
+          ) : (
+            <span className="material-icons">download</span>
+          )}
         </button>
         <input
           ref={fileInputRef}
@@ -397,33 +483,27 @@ const FolderView = () => {
         {getChildNotes(null).map((note) => (
           <div
             key={note.id}
-            className="note root-note"
-            draggable
-            onDragStart={() => setDragging({ type: 'note', id: note.id })}
+            className="root-note"
           >
-            <span onClick={() => {
-              setCurrentNote(note);
-              setView('tldraw');
-            }}>
-              📝 {note.name}
-            </span>
-            <div className="actions">
-              <button onClick={async () => {
-                const name = window.prompt('Enter new name:', note.name);
-                if (name) {
-                  try {
-                    await renameNote(note.id, name);
-                  } catch (e) {
-                    console.error('Failed to rename note:', e);
-                  }
-                }
-              }}>Rename</button>
-              <button onClick={() => {
-                if (window.confirm('Delete this note?')) {
-                  deleteNote(note.id);
-                }
-              }}>Delete</button>
-            </div>
+            <NoteItem
+              note={note}
+              onSelect={() => {
+                setCurrentNote(note);
+                setView('tldraw');
+              }}
+              onDragStart={() => setDragging({ type: 'note', id: note.id })}
+              onRename={async (id: string, name: string) => {
+                await renameNote(id, name);
+              }}
+              onDelete={deleteNote}
+              onTouchStart={(e: React.TouchEvent<HTMLDivElement>) => {
+                const target = e.currentTarget as HTMLDivElement;
+                (target as any).draggable = true;
+                const event = new Event('dragstart', { bubbles: true });
+                target.dispatchEvent(event);
+                setDragging({ type: 'note', id: note.id });
+              }}
+            />
           </div>
         ))}
       </div>

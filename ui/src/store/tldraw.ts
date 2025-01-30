@@ -71,7 +71,19 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   // Basic setters
   set: (updates) => set(updates),
   setView: (view) => set({ view }),
-  setStructure: (folders, notes) => set({ folders, notes }),
+  setStructure: (folders, notes) => {
+    console.log('Setting structure with:', { folders, notes });
+    const updatedNotes = notes.map(note => ({
+      ...note,
+      type: note.type || 'Tldraw' // Ensure type is set
+    }));
+    set({
+      folders,
+      notes: updatedNotes,
+      isLoading: false,
+      error: null
+    });
+  },
   setCurrentNote: (note) => set({ currentNote: note }),
   setDragging: (dragging) => set({ dragging }),
   setError: (error) => set({ error }),
@@ -81,7 +93,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   addNote: async (note) => {
     set({ isLoading: true, error: null });
     try {
-      await apiCall({ CreateNote: [note.name, note["folder-id"]] });
+      await apiCall({ CreateNote: [note.name, note["folder-id"], note.type] });
       set((state) => ({ notes: [...state.notes, note] }));
     } catch (error) {
       set({ error: 'Failed to add note' });
@@ -95,12 +107,16 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       // Optimistic update
+      const existingNote = get().notes.find(note => note.id === id);
+      if (!existingNote) throw new Error('Note not found');
+
+      const updatedNote = { ...existingNote, ...updates };
       set((state) => ({
         notes: state.notes.map((note) =>
-          note.id === id ? { ...note, ...updates } : note
+          note.id === id ? updatedNote : note
         ),
         currentNote: state.currentNote?.id === id
-          ? { ...state.currentNote, ...updates }
+          ? updatedNote
           : state.currentNote
       }));
 
@@ -122,11 +138,15 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   deleteNote: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      await apiCall({ DeleteNote: [id] });
+      console.log('Deleting note:', id);
+      const result = await apiCall({ DeleteNote: id });
+      console.log('Delete note response:', result);
       set((state) => ({
         notes: state.notes.filter((note) => note.id !== id),
-        currentNote: state.currentNote?.id === id ? undefined : state.currentNote
+        currentNote: state.currentNote?.id === id ? undefined : state.currentNote,
+        view: state.currentNote?.id === id ? 'folder' : state.view
       }));
+      console.log('State updated after delete');
     } catch (error) {
       set({ error: 'Failed to delete note' });
       throw error;

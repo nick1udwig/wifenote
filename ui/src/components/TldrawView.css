@@ -1,0 +1,50 @@
+.tldraw-view {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+.tldraw-view .toolbar {
+  height: 40px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 4px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tldraw-view .toolbar button {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tldraw-view .toolbar button:hover {
+  background: var(--bg-tertiary);
+}
+
+.tldraw-view .toolbar .note-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.tldraw-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
