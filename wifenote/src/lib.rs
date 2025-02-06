@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use crate::kinode::process::wifenote::{
     Folder, Note, Request as NoteRequest, Response as NoteResponse,
 };
+use kinode_process_lib::logging::{debug, error, info, init_logging, Level};
 use kinode_process_lib::{
-    await_message, call_init, get_blob, http, http::server::HttpServerRequest, println, vfs,
-    Address, LazyLoadBlob, Message, Response,
+    await_message, call_init, http, http::server::HttpServerRequest, last_blob, vfs, Address,
+    LazyLoadBlob, Message, Response,
 };
 
 wit_bindgen::generate!({
@@ -149,10 +150,10 @@ fn handle_http_request(
         } => server.handle_websocket_open(path, channel_id),
         HttpServerRequest::WebSocketClose(channel_id) => server.handle_websocket_close(channel_id),
         HttpServerRequest::Http(http_request) => {
-            println!("http: a");
+            debug!("http: a");
             match http_request.method()? {
                 http::Method::GET => {
-                    println!("http: GET");
+                    debug!("http: GET");
                     // Serve static files
                     let mut headers = HashMap::new();
                     headers.insert("Content-Type".to_string(), "text/html".to_string());
@@ -163,13 +164,13 @@ fn handle_http_request(
                     );
                 }
                 http::Method::POST => {
-                    println!("http: POST");
-                    let Some(body) = get_blob() else {
+                    debug!("http: POST");
+                    let Some(body) = last_blob() else {
                         return Err(anyhow::anyhow!(
                             "received a POST HTTP request with no body, skipping"
                         ));
                     };
-                    println!("http: POST trying to into note");
+                    debug!("http: POST trying to into note");
                     let resp = handle_note_request(body.bytes.try_into()?, state)?;
                     http::server::send_response(http::StatusCode::OK, None, resp.into());
                 }
@@ -184,7 +185,7 @@ fn handle_http_request(
 }
 
 fn handle_note_request(req: NoteRequest, state: &mut State) -> anyhow::Result<NoteResponse> {
-    println!("note: {:?}", req);
+    debug!("note: {:?}", req);
     let resp = match req {
         NoteRequest::CreateFolder((name, parent)) => {
             let id = State::generate_id();
@@ -465,12 +466,13 @@ fn handle_message(
 
 call_init!(init);
 fn init(our: Address) {
-    println!("{our}: begin");
+    init_logging(Level::DEBUG, Level::INFO, None, None, None).unwrap();
+    info!("{our}: begin");
 
     let drive = vfs::create_drive(our.package_id(), "notes", None).unwrap();
 
     let mut state = State::load_from_disk(drive.clone()).unwrap_or_else(|e| {
-        println!("Error loading state: {e}, starting fresh");
+        error!("Error loading state: {e}, starting fresh");
         State::new(drive.clone())
     });
 
@@ -487,10 +489,10 @@ fn init(our: Address) {
 
     loop {
         match await_message() {
-            Err(send_error) => println!("got SendError: {send_error}"),
+            Err(send_error) => error!("got SendError: {send_error}"),
             Ok(ref message) => match handle_message(message, &mut state, &mut server) {
                 Ok(_) => {}
-                Err(e) => println!("got error while handling message: {e:?}"),
+                Err(e) => error!("got error while handling message: {e:?}"),
             },
         }
     }
