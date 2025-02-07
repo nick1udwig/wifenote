@@ -73,13 +73,9 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   setView: (view) => set({ view }),
   setStructure: (folders, notes) => {
     console.log('Setting structure with:', { folders, notes });
-    const updatedNotes = notes.map(note => ({
-      ...note,
-      type: note.type || 'Tldraw' // Ensure type is set
-    }));
     set({
       folders,
-      notes: updatedNotes,
+      notes,
       isLoading: false,
       error: null
     });
