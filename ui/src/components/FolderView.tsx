@@ -244,7 +244,7 @@ const FolderView: React.FC = () => {
           name: n.name,
           'folder-id': n.folder_id,
           content: n.content,
-          type: n.type || 'Tldraw'
+          type: n.note_type
         }));
 
         setStructure(transformedFolders, transformedNotes);
