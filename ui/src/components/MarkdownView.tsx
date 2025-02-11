@@ -1,12 +1,20 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import ReactMarkdown from 'react-markdown';
+import { TlDrawNote } from '../types/TlDraw';
 import './MarkdownView.css';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
-const MarkdownView: React.FC = () => {
+interface MarkdownViewProps {
+  note?: TlDrawNote;
+  readOnly?: boolean;
+  onEdit?: () => void;
+}
+
+const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onEdit }) => {
   const { currentNote, setView } = useTlDrawStore();
+  const currentNoteToUse = note || currentNote;
   const [content, setContent] = useState('');
   const [preview, setPreview] = useState(false);
 
@@ -25,13 +33,13 @@ const MarkdownView: React.FC = () => {
     }
 
     const loadContent = async () => {
-      if (!currentNote) return;
+      if (!currentNoteToUse) return;
       
       try {
-        console.log('Loading note:', currentNote.id);
+        console.log('Loading note:', currentNoteToUse.id);
         const response = await fetch(`${BASE_URL}/api`, {
           method: 'POST',
-          body: JSON.stringify({ GetNote: currentNote.id }),
+          body: JSON.stringify({ GetNote: currentNoteToUse.id }),
         });
         const data = await response.json();
         console.log('Load response:', data);
@@ -48,15 +56,15 @@ const MarkdownView: React.FC = () => {
     };
 
     loadContent();
-  }, [currentNote?.id]);
+  }, [currentNoteToUse?.id]);
 
   // Save changes to backend
   const saveContent = useCallback(async (newContent: string) => {
-    if (!currentNote) return;
+    if (!currentNoteToUse) return;
 
     const contentBytes = Array.from(new TextEncoder().encode(newContent));
     const request = {
-      UpdateNoteContent: [currentNote.id, contentBytes]
+      UpdateNoteContent: [currentNoteToUse.id, contentBytes]
     };
 
     try {
@@ -83,11 +91,15 @@ const MarkdownView: React.FC = () => {
   return (
     <div className="markdown-view">
       <div className="toolbar">
-        <span className="note-name">{currentNote?.name}</span>
-        <button onClick={() => setPreview(!preview)}>
-          {preview ? 'Edit' : 'Preview'}
-        </button>
-        {!window.readOnlyNote && <button onClick={() => setView('folder')}>← Back to Folders</button>}
+        <span className="note-name">{currentNoteToUse?.name}</span>
+        {!readOnly && (
+          <>
+            <button onClick={() => setPreview(!preview)}>
+              {preview ? 'Edit' : 'Preview'}
+            </button>
+            <button onClick={() => onEdit ? onEdit() : setView('folder')}>← Back to Folders</button>
+          </>
+        )}
       </div>
       <div className="markdown-content">
         {preview ? (
@@ -100,9 +112,9 @@ const MarkdownView: React.FC = () => {
             onChange={(e) => setContent(e.target.value)}
             placeholder="Type your markdown here..."
             spellCheck={false}
-            autoFocus
+            autoFocus={!readOnly}
             style={{ fontSize: '16px' }}
-            readOnly={window.readOnlyNote !== undefined}
+            readOnly={readOnly}
           />
         )}
       </div>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { TlDrawNote } from '../types/TlDraw';
 import './TldrawView.css';
 import { 
   Tldraw, 
@@ -14,21 +15,28 @@ import SettingsPane from './SettingsPane';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
-const TldrawView: React.FC = () => {
+interface TldrawViewProps {
+  note?: TlDrawNote;
+  readOnly?: boolean;
+  onEdit?: () => void;
+}
+
+const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit }) => {
   const { currentNote, setView, updateNote } = useTlDrawStore();
+  const currentNoteToUse = note || currentNote;
   const [editor, setEditor] = useState<Editor | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
   // Load content when note changes
   useEffect(() => {
     const loadContent = async () => {
-      if (!currentNote || !editor) return;
+      if (!currentNoteToUse || !editor) return;
       
       try {
-        console.log('Loading note:', currentNote.id);
+        console.log('Loading note:', currentNoteToUse.id);
         const response = await fetch(`${BASE_URL}/api`, {
           method: 'POST',
-          body: JSON.stringify({ GetNote: currentNote.id }),
+          body: JSON.stringify({ GetNote: currentNoteToUse.id }),
         });
         const data = await response.json();
         console.log('Load response:', data);
@@ -48,11 +56,11 @@ const TldrawView: React.FC = () => {
     };
 
     loadContent();
-  }, [currentNote?.id, editor]);
+  }, [currentNoteToUse?.id, editor]);
 
   // Save changes to backend 
   useEffect(() => {
-    if (!editor || !currentNote) return;
+    if (!editor || !currentNoteToUse || readOnly) return;
 
     const unlisten = editor.store.listen(
       (update) => {
@@ -63,7 +71,7 @@ const TldrawView: React.FC = () => {
           
           const contentBytes = Array.from(new TextEncoder().encode(JSON.stringify(snapshot)));
           const request: UpdateNoteContentRequest = {
-            UpdateNoteContent: [currentNote.id, contentBytes]
+            UpdateNoteContent: [currentNoteToUse.id, contentBytes]
           };
 
           fetch(`${BASE_URL}/api`, {
@@ -79,7 +87,7 @@ const TldrawView: React.FC = () => {
     );
 
     return () => unlisten();
-  }, [editor, currentNote]);
+  }, [editor, currentNoteToUse, readOnly]);
 
   // Handle UI events (tool changes etc)
   const handleChange: TLUiEventHandler = useCallback((name) => {
@@ -91,38 +99,28 @@ const TldrawView: React.FC = () => {
     console.log('Editor mounted');
     setEditor(newEditor);
 
-    // If this is a public note view, load it in read-only mode
-    if (window.readOnlyNote) {
-      const { content } = window.readOnlyNote;
-      const contentStr = new TextDecoder().decode(new Uint8Array(content));
-      const storedSnapshot = JSON.parse(contentStr);
-      
-      newEditor.setCurrentTool('select');
-      loadSnapshot(newEditor.store, storedSnapshot);
-      
-      // Disable editing
+    // Set up read-only mode if needed
+    if (readOnly) {
       newEditor.updateInstanceState({ isReadonly: true });
-      
-      // Hide toolbar in read-only mode
-      const toolbar = document.querySelector('.toolbar') as HTMLDivElement;
-      if (toolbar) toolbar.style.display = 'none';
     }
   }, []);
 
   return (
     <div className="tldraw-view">
       <div className="toolbar">
-        <span className="note-name">{currentNote?.name}</span>
-        {!window.readOnlyNote && <button onClick={() => setView('folder')}>← Back to Folders</button>}
-        {currentNote && (
+        <span className="note-name">{currentNoteToUse?.name}</span>
+        {!readOnly && (
+          <button onClick={() => onEdit ? onEdit() : setView('folder')}>← Back to Folders</button>
+        )}
+        {currentNoteToUse && !readOnly && (
           <button onClick={() => setShowSettings(true)} title="Settings">
             <Settings size={16} />
           </button>
         )}
       </div>
-      {showSettings && currentNote && (
+      {showSettings && currentNoteToUse && !readOnly && (
         <SettingsPane
-          note={currentNote}
+          note={currentNoteToUse}
           onClose={() => setShowSettings(false)}
           onNoteUpdated={(updatedNote) => {
             updateNote(updatedNote);

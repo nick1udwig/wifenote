@@ -19,7 +19,22 @@ interface FolderSettingsProps {
 const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated }) => {
   const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
+  const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const [darkMode, setDarkMode] = useState(() => {
+    const override = localStorage.getItem('darkMode');
+    return override ? override === 'true' : darkModeMediaQuery.matches;
+  });
+
+  // Handle system theme changes
+  useEffect(() => {
+    const handleThemeChange = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('darkMode')) {
+        setDarkMode(e.matches);
+      }
+    };
+    darkModeMediaQuery.addEventListener('change', handleThemeChange);
+    return () => darkModeMediaQuery.removeEventListener('change', handleThemeChange);
+  }, []);
 
   // Fetch pending invites on mount
   useEffect(() => {
@@ -29,7 +44,6 @@ const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated 
   // Apply dark mode
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('darkMode', darkMode.toString());
   }, [darkMode]);
 
   const fetchInvites = async () => {
@@ -97,7 +111,10 @@ const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated 
           <input
             type="checkbox"
             checked={darkMode}
-            onChange={(e) => setDarkMode(e.target.checked)}
+            onChange={(e) => {
+              setDarkMode(e.target.checked);
+              localStorage.setItem('darkMode', e.target.checked.toString());
+            }}
           />
           Dark Mode
         </label>

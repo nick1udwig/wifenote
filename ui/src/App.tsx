@@ -17,25 +17,29 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined
 
 function App() {
+  const [isPublicView, setIsPublicView] = useState(false);
   const { view, currentNote, setStructure, setCurrentNote } = useTlDrawStore()
   const [nodeConnected, setNodeConnected] = useState(true)
   const [initializing, setInitializing] = useState(true)
 
-  // Handle public note view
+  // Handle view type determination and public note loading
   useEffect(() => {
-    const path = window.location.pathname
-    const noteIdMatch = path.match(/\/public\/(.+)$/)
+    const path = window.location.pathname;
+    const noteIdMatch = path.match(/\/public\/(.+)$/);
 
     if (noteIdMatch) {
-      const noteId = noteIdMatch[1]
+      setIsPublicView(true);
+      const noteId = noteIdMatch[1];
 
-      // Fetch public note
+      // Fetch public note using the public API
       fetch(`${BASE_URL}/public/${noteId}`)
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Note not found or not public');
+          }
+          return response.json();
+        })
         .then(note => {
-          // Store note data for view components
-          window.readOnlyNote = note
-
           const transformedNote: TlDrawNote = {
             id: note.id,
             name: note.name,
@@ -44,17 +48,18 @@ function App() {
             type: note.note_type,
             isPublic: note.is_public,
             collaborators: note.collaborators,
-          }
-
-          setCurrentNote(transformedNote)
+          };
+          setCurrentNote(transformedNote);
         })
-        .catch(console.error)
-        .finally(() => setInitializing(false))
-
-      return
+        .catch(error => {
+          console.error('Error loading public note:', error);
+          // Handle error display
+        })
+        .finally(() => setInitializing(false));
+    } else {
+      setIsPublicView(false);
+      setInitializing(false);
     }
-
-    setInitializing(false)
   }, [])
 
   // Initialize dark mode from localStorage
@@ -175,12 +180,22 @@ function App() {
 
   return (
     <div className="app">
-      {view === 'folder' ? (
-        <FolderView />
-      ) : currentNote?.type === 'Markdown' ? (
-        <MarkdownView />
+      {isPublicView ? (
+        // Public view only shows the note content
+        currentNote?.type === 'Markdown' ? (
+          <MarkdownView note={currentNote} readOnly={true} />
+        ) : (
+          <TldrawView note={currentNote} readOnly={true} />
+        )
       ) : (
-        <TldrawView />
+        // Private authenticated view
+        view === 'folder' ? (
+          <FolderView />
+        ) : currentNote?.type === 'Markdown' ? (
+          <MarkdownView note={currentNote} />
+        ) : (
+          <TldrawView note={currentNote} />
+        )
       )}
     </div>
   )

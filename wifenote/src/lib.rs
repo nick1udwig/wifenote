@@ -174,29 +174,49 @@ fn handle_http_request(
                 http::Method::GET => {
                     debug!("http: GET");
 
-                    // Handle public note access
-                    if let Some(note_id) = http_request.path()?.strip_prefix("/public/") {
-                        if let Some(note) = state.notes.get(note_id) {
-                            if note.is_public {
-                                let mut headers = HashMap::new();
-                                headers.insert(
-                                    "Content-Type".to_string(),
-                                    "application/json".to_string(),
-                                );
-                                http::server::send_response(
-                                    http::StatusCode::OK,
-                                    Some(headers),
-                                    serde_json::to_vec(&note)?,
-                                );
-                            } else {
-                                http::server::send_response(
-                                    http::StatusCode::NOT_FOUND,
-                                    None,
-                                    "Note not found or not public".as_bytes().to_vec(),
-                                );
+                    // Handle public note access through public server
+                    if is_public {
+                        if let Some(note_id) = http_request.path()?.strip_prefix("/public/") {
+                            // Only allow GET requests to public notes through public server
+                            if let Some(note) = state.notes.get(note_id) {
+                                if note.is_public {
+                                    let mut headers = HashMap::new();
+                                    headers.insert(
+                                        "Content-Type".to_string(),
+                                        "application/json".to_string(),
+                                    );
+                                    // Return only the necessary public note data
+                                    let public_note = Note {
+                                        id: note.id.clone(),
+                                        name: note.name.clone(),
+                                        folder_id: None, // Don't expose folder structure
+                                        content: note.content.clone(),
+                                        note_type: note.note_type.clone(),
+                                        is_public: true,
+                                        collaborators: Vec::new(), // Don't expose collaborators
+                                    };
+                                    http::server::send_response(
+                                        http::StatusCode::OK,
+                                        Some(headers),
+                                        serde_json::to_vec(&public_note)?,
+                                    );
+                                } else {
+                                    http::server::send_response(
+                                        http::StatusCode::NOT_FOUND,
+                                        None,
+                                        "Note not found or not public".as_bytes().to_vec(),
+                                    );
+                                }
+                                return Ok(());
                             }
-                            return Ok(());
                         }
+                        // Return 404 for any other public server requests
+                        http::server::send_response(
+                            http::StatusCode::NOT_FOUND,
+                            None,
+                            "Not found".as_bytes().to_vec(),
+                        );
+                        return Ok(());
                     }
 
                     // Block access to UI through public server
