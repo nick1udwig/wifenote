@@ -87,7 +87,7 @@ const MarkdownView: React.FC = () => {
         <button onClick={() => setPreview(!preview)}>
           {preview ? 'Edit' : 'Preview'}
         </button>
-        <button onClick={() => setView('folder')}>← Back to Folders</button>
+        {!window.readOnlyNote && <button onClick={() => setView('folder')}>← Back to Folders</button>}
       </div>
       <div className="markdown-content">
         {preview ? (

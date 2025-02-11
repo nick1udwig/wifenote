@@ -148,8 +148,20 @@ fn migrate_export_data(mut data: ExportData) -> anyhow::Result<ExportData> {
 fn handle_http_request(
     req: HttpServerRequest,
     state: &mut State,
-    server: &mut http::server::HttpServer,
+    private_server: &mut http::server::HttpServer,
+    public_server: &mut http::server::HttpServer,
 ) -> anyhow::Result<()> {
+    // Extract server depending on the path
+    let (server, is_public) = if let HttpServerRequest::Http(ref http_request) = req {
+        if http_request.path()?.starts_with("/public") {
+            (public_server, true)
+        } else {
+            (private_server, false)
+        }
+    } else {
+        (private_server, false)
+    };
+
     match req {
         HttpServerRequest::WebSocketOpen {
             ref path,
@@ -163,7 +175,7 @@ fn handle_http_request(
                     debug!("http: GET");
 
                     // Handle public note access
-                    if let Some(note_id) = http_request.path()?.strip_prefix("/notes/") {
+                    if let Some(note_id) = http_request.path()?.strip_prefix("/public/") {
                         if let Some(note) = state.notes.get(note_id) {
                             if note.is_public {
                                 let mut headers = HashMap::new();
@@ -185,6 +197,16 @@ fn handle_http_request(
                             }
                             return Ok(());
                         }
+                    }
+
+                    // Block access to UI through public server
+                    if is_public {
+                        http::server::send_response(
+                            http::StatusCode::NOT_FOUND,
+                            None,
+                            "Not found".as_bytes().to_vec(),
+                        );
+                        return Ok(());
                     }
 
                     // Serve static files for all other GET requests
@@ -596,16 +618,17 @@ fn handle_note_request(req: NoteRequest, state: &mut State) -> anyhow::Result<No
 fn handle_message(
     message: &Message,
     state: &mut State,
-    server: &mut http::server::HttpServer,
+    private_server: &mut http::server::HttpServer,
+    public_server: &mut http::server::HttpServer,
 ) -> anyhow::Result<()> {
     match message.body().try_into()? {
         Msg::NoteRequest(req) => {
             let resp = handle_note_request(req, state)?;
             Response::new().body(resp).send()?;
         }
-        Msg::HttpRequest(req) => handle_http_request(req, state, server)?,
+        Msg::HttpRequest(req) => handle_http_request(req, state, private_server, public_server)?,
     }
-    server.ws_push_all_channels(
+    private_server.ws_push_all_channels(
         "/",
         http::server::WsMessageType::Text,
         LazyLoadBlob {
@@ -633,20 +656,26 @@ fn init(our: Address) {
     });
 
     // Set up HTTP server
-    let mut server = http::server::HttpServer::new(5);
-    let config = http::server::HttpBindingConfig::new(false, false, false, None);
-    server.bind_http_path("/api", config.clone()).unwrap();
-    server.serve_ui("ui", vec!["/"], config.clone()).unwrap();
-    server
+    // Private server for authenticated access
+    let mut private_server = http::server::HttpServer::new(5);
+    let private_config = http::server::HttpBindingConfig::new(false, false, false, None);
+    private_server.bind_http_path("/api", private_config.clone()).unwrap();
+    private_server.serve_ui("ui", vec!["/"], private_config.clone()).unwrap();
+    private_server
         .bind_ws_path("/", http::server::WsBindingConfig::new(false, false, false))
         .unwrap();
+
+    // Public server for public note access
+    let mut public_server = http::server::HttpServer::new(5);
+    let public_config = http::server::HttpBindingConfig::new(true, false, false, None);
+    public_server.bind_http_path("/public", public_config.clone()).unwrap();
 
     kinode_process_lib::homepage::add_to_homepage("wifenote", Some(ICON), Some(""), None);
 
     loop {
         match await_message() {
             Err(send_error) => error!("got SendError: {send_error}"),
-            Ok(ref message) => match handle_message(message, &mut state, &mut server) {
+            Ok(ref message) => match handle_message(message, &mut state, &mut private_server, &mut public_server) {
                 Ok(_) => {}
                 Err(e) => error!("got error while handling message: {e:?}"),
             },

@@ -17,8 +17,57 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined
 
 function App() {
-  const { view, currentNote, setStructure } = useTlDrawStore()
+  const { view, currentNote, setStructure, setCurrentNote } = useTlDrawStore()
   const [nodeConnected, setNodeConnected] = useState(true)
+  const [initializing, setInitializing] = useState(true)
+
+  // Handle public note view
+  useEffect(() => {
+    const path = window.location.pathname
+    const noteIdMatch = path.match(/\/public\/(.+)$/)
+
+    if (noteIdMatch) {
+      const noteId = noteIdMatch[1]
+
+      // Fetch public note
+      fetch(`${BASE_URL}/public/${noteId}`)
+        .then(response => response.json())
+        .then(note => {
+          // Store note data for view components
+          window.readOnlyNote = note
+
+          const transformedNote: TlDrawNote = {
+            id: note.id,
+            name: note.name,
+            'folder-id': note.folder_id,
+            content: note.content,
+            type: note.note_type,
+            isPublic: note.is_public,
+            collaborators: note.collaborators,
+          }
+
+          setCurrentNote(transformedNote)
+        })
+        .catch(console.error)
+        .finally(() => setInitializing(false))
+
+      return
+    }
+
+    setInitializing(false)
+  }, [])
+
+  // Initialize dark mode from localStorage
+  useEffect(() => {
+    const storedDarkMode = localStorage.getItem('darkMode');
+    if (storedDarkMode === 'true') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else if (storedDarkMode === 'false') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
 
   useEffect(() => {
     // Get structure using http
@@ -108,7 +157,11 @@ function App() {
     }
   }, [])
 
-  if (!nodeConnected) {
+  if (initializing) {
+    return <div>Loading...</div>
+  }
+
+  if (!nodeConnected && !window.readOnlyNote) {
     return (
       <div className="node-not-connected">
         <h2 style={{ color: "red" }}>Node not connected</h2>

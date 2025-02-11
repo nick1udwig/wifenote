@@ -22,6 +22,7 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
   const [newCollaborator, setNewCollaborator] = useState('');
   const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === 'true');
 
   // Fetch pending invites on mount
   useEffect(() => {
@@ -130,6 +131,12 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
     }
   };
 
+  // Apply dark mode
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    localStorage.setItem('darkMode', darkMode.toString());
+  }, [darkMode]);
+
   return (
     <div className="settings-pane">
       <div className="settings-header">
@@ -137,6 +144,18 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
         <button className="close-button" onClick={onClose}>
           <X size={24} />
         </button>
+      </div>
+
+      <div className="settings-section">
+        <h3>Appearance</h3>
+        <label className="toggle-label">
+          <input
+            type="checkbox"
+            checked={darkMode}
+            onChange={(e) => setDarkMode(e.target.checked)}
+          />
+          Dark Mode
+        </label>
       </div>
 
       {error && (
@@ -157,7 +176,7 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
         </label>
         {isPublic && (
           <div className="public-link">
-            Share link: {window.location.origin}{BASE_URL}/notes/{note.id}
+            Share link: {window.location.origin}{BASE_URL}/public/{note.id}
           </div>
         )}
       </div>

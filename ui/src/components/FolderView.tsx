@@ -2,7 +2,8 @@ import React, { useCallback, useRef, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import { CreateFolderRequest, CreateNoteRequest, ImportRequest, MoveFolderRequest, MoveNoteRequest } from '../types/TlDraw';
 import NoteItem from './NoteItem';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Settings } from 'lucide-react';
+import FolderSettings from './FolderSettings';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
@@ -166,6 +167,7 @@ const FolderItem: React.FC<FolderItemProps> = ({
 };
 
 const FolderView: React.FC = () => {
+  const [showSettings, setShowSettings] = useState(false);
   const {
     folders,
     notes,
@@ -406,7 +408,44 @@ const FolderView: React.FC = () => {
 
   return (
     <div className="folder-view">
+      {showSettings && (
+        <FolderSettings
+          onClose={() => setShowSettings(false)}
+          onNoteUpdated={() => {
+            // Request the updated structure after accepting an invite
+            fetch(`${BASE_URL}/api`, {
+              method: 'POST',
+              body: '"GetStructure"',
+            })
+              .then(response => response.json())
+              .then(data => {
+                if ('GetStructure' in data && 'Ok' in data.GetStructure) {
+                  const [folders, notes] = data.GetStructure.Ok;
+                  const transformedFolders = folders.map((f: any) => ({
+                    id: f.id,
+                    name: f.name,
+                    'parent-id': f.parent_id
+                  }));
+                  const transformedNotes = notes.map((n: any): TlDrawNote => ({
+                    id: n.id,
+                    name: n.name,
+                    'folder-id': n.folder_id,
+                    content: n.content,
+                    type: n.note_type,
+                    isPublic: n.is_public,
+                    collaborators: n.collaborators
+                  }));
+                  setStructure(transformedFolders, transformedNotes);
+                }
+              })
+              .catch(console.error);
+          }}
+        />
+      )}
       <div className="toolbar">
+        <button onClick={() => setShowSettings(true)} title="Settings">
+          <Settings size={24} />
+        </button>
         <button onClick={handleCreateFolder} disabled={isLoading} title="New Folder">
           {isLoading ? (
             <span className="material-icons">sync</span>

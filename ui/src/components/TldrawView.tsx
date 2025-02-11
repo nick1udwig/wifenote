@@ -113,7 +113,7 @@ const TldrawView: React.FC = () => {
     <div className="tldraw-view">
       <div className="toolbar">
         <span className="note-name">{currentNote?.name}</span>
-        <button onClick={() => setView('folder')}>← Back to Folders</button>
+        {!window.readOnlyNote && <button onClick={() => setView('folder')}>← Back to Folders</button>}
         {currentNote && (
           <button onClick={() => setShowSettings(true)} title="Settings">
             <Settings size={16} />
