@@ -5,6 +5,8 @@ export interface ApiNote {
   folder_id: string | null;
   content: number[];
   note_type: 'Tldraw' | 'Markdown';
+  is_public: boolean;
+  collaborators: string[];
 }
 
 export interface ApiFolder {
@@ -16,95 +18,56 @@ export interface ApiFolder {
 // UI types (kebab-case)
 export type TlDrawNoteType = 'Tldraw' | 'Markdown';
 
-export interface TlDrawNote {
-  id: string;
-  name: string;
-  "folder-id": string | null;
-  type: TlDrawNoteType;
-  content: number[];
-}
-
 export interface TlDrawFolder {
   id: string;
   name: string;
-  "parent-id": string | null;
+  'parent-id': string | null;
 }
 
-// Request Types
-export interface UpdateNoteContentRequest {
-  UpdateNoteContent: [string, number[]];  // (note id, new content)
+export interface TlDrawNote {
+  id: string;
+  name: string;
+  'folder-id': string | null;
+  content: number[];
+  type: TlDrawNoteType;
+  isPublic: boolean;
+  collaborators: string[];
 }
 
-export interface GetNoteRequest {
-  GetNote: string;
+// Collaboration types
+export interface Invite {
+  note_id: string;
+  inviter_node_id: string;
+  note_name: string;
 }
 
-export interface CreateNoteRequest {
-  CreateNote: [string, string | null, TlDrawNoteType];  // (note name, folder id, note type)
-}
+// Request types
+export type CreateFolderRequest = { CreateFolder: [string, string | null] }; // [name, parentId]
+export type RenameFolderRequest = { RenameFolder: [string, string] }; // [id, newName]
+export type DeleteFolderRequest = { DeleteFolder: string }; // folderId
+export type MoveFolderRequest = { MoveFolder: [string, string | null] }; // [id, newParentId]
 
-export interface CreateFolderRequest {
-  CreateFolder: [string, string | null];
-}
+export type CreateNoteRequest = { CreateNote: [string, string | null, TlDrawNoteType] }; // [name, folderId, type]
+export type RenameNoteRequest = { RenameNote: [string, string] }; // [id, newName]
+export type DeleteNoteRequest = { DeleteNote: string }; // noteId
+export type MoveNoteRequest = { MoveNote: [string, string | null] }; // [id, newFolderId]
+export type GetNoteRequest = { GetNote: string }; // noteId
+export type UpdateNoteContentRequest = { UpdateNoteContent: [string, number[]] }; // [id, content]
 
-export interface RenameNoteRequest {
-  RenameNote: [string, string];
-}
+export type SetNotePublicRequest = { SetNotePublic: [string, boolean] }; // [noteId, isPublic]
+export type InviteCollaboratorRequest = { InviteCollaborator: [string, string] }; // [noteId, nodeId]
+export type RemoveCollaboratorRequest = { RemoveCollaborator: [string, string] }; // [noteId, nodeId]
+export type AcceptInviteRequest = { AcceptInvite: [string, string] }; // [noteId, inviterNodeId]
+export type RejectInviteRequest = { RejectInvite: [string, string] }; // [noteId, inviterNodeId]
+export type GetInvitesRequest = { GetInvites: null };
 
-export interface RenameFolderRequest {
-  RenameFolder: [string, string];
-}
+export type ImportRequest = { ImportAll: number[] };
 
-export interface DeleteNoteRequest {
-  DeleteNote: string;
-}
-
-export interface DeleteFolderRequest {
-  DeleteFolder: string;
-}
-
-export interface MoveNoteRequest {
-  MoveNote: [string, string | null];
-}
-
-export interface MoveFolderRequest {
-  MoveFolder: [string, string | null];
-}
-
-export interface ExportRequest {
-  ExportAll: null;
-}
-
-export interface ImportRequest {
-  ImportAll: number[];  // compressed bytes
-}
-
-// Response Types
-type Result<T, E = string> = { Ok: T } | { Err: E };
-
-// Response for ExportAll
-export interface ExportResponse {
-  ExportAll: Result<number[]>;
-}
-
-export interface StructureResponse {
-  GetStructure: Result<[ApiFolder[], ApiNote[]]>;
-}
-
-export interface NoteResponse {
-  GetNote: Result<TlDrawNote>;
-}
-
-export interface ActionResponse {
-  Ok: {
-    CreateFolder?: Result<TlDrawFolder>;
-    RenameFolder?: Result<TlDrawFolder>;
-    DeleteFolder?: Result<null>;
-    MoveFolder?: Result<TlDrawFolder>;
-    CreateNote?: Result<TlDrawNote>;
-    RenameNote?: Result<TlDrawNote>;
-    DeleteNote?: Result<null>;
-    MoveNote?: Result<TlDrawNote>;
-    UpdateNoteContent?: Result<null>;
+// Response type
+export type StructureResponse = {
+  GetStructure: {
+    Ok: [ApiFolder[], ApiNote[]];
+  } | {
+    Err: string;
   };
-}
+};

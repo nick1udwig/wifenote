@@ -17,8 +17,62 @@ const WEBSOCKET_URL = import.meta.env.DEV
   : undefined
 
 function App() {
-  const { view, currentNote, setStructure } = useTlDrawStore()
+  const [isPublicView, setIsPublicView] = useState(false);
+  const { view, currentNote, setStructure, setCurrentNote } = useTlDrawStore()
   const [nodeConnected, setNodeConnected] = useState(true)
+  const [initializing, setInitializing] = useState(true)
+
+  // Handle view type determination and public note loading
+  useEffect(() => {
+    const path = window.location.pathname;
+    const noteIdMatch = path.match(/\/public\/(.+)$/);
+
+    if (noteIdMatch) {
+      setIsPublicView(true);
+      const noteId = noteIdMatch[1];
+
+      // Fetch public note using the public API
+      fetch(`${BASE_URL}/public/${noteId}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Note not found or not public');
+          }
+          return response.json();
+        })
+        .then(note => {
+          const transformedNote: TlDrawNote = {
+            id: note.id,
+            name: note.name,
+            'folder-id': note.folder_id,
+            content: note.content,
+            type: note.note_type,
+            isPublic: note.is_public,
+            collaborators: note.collaborators,
+          };
+          setCurrentNote(transformedNote);
+        })
+        .catch(error => {
+          console.error('Error loading public note:', error);
+          // Handle error display
+        })
+        .finally(() => setInitializing(false));
+    } else {
+      setIsPublicView(false);
+      setInitializing(false);
+    }
+  }, [])
+
+  // Initialize dark mode from localStorage
+  useEffect(() => {
+    const storedDarkMode = localStorage.getItem('darkMode');
+    if (storedDarkMode === 'true') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else if (storedDarkMode === 'false') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
 
   useEffect(() => {
     // Get structure using http
@@ -45,6 +99,8 @@ function App() {
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
             content: n.content,
             type: n.note_type,
+            isPublic: n.is_public,
+            collaborators: n.collaborators,
           }));
 
           console.log('Initial structure:', { transformedFolders, transformedNotes });
@@ -81,13 +137,15 @@ function App() {
                   'parent-id': f.parent_id // Convert snake_case to kebab-case
                 }));
 
-                const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
-                  id: n.id,
-                  name: n.name,
-                  'folder-id': n.folder_id, // Convert snake_case to kebab-case
-                  content: n.content,
-                  type: n.note_type
-                }));
+                  const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
+                    id: n.id,
+                    name: n.name,
+                    'folder-id': n.folder_id, // Convert snake_case to kebab-case
+                    content: n.content,
+                    type: n.note_type,
+                    isPublic: n.is_public,
+                    collaborators: n.collaborators,
+                  }));
 
                 // Re-apply the transform and update state
                 setStructure(transformedFolders, transformedNotes);
@@ -104,7 +162,11 @@ function App() {
     }
   }, [])
 
-  if (!nodeConnected) {
+  if (initializing) {
+    return <div>Loading...</div>
+  }
+
+  if (!nodeConnected && !window.readOnlyNote) {
     return (
       <div className="node-not-connected">
         <h2 style={{ color: "red" }}>Node not connected</h2>
@@ -118,12 +180,22 @@ function App() {
 
   return (
     <div className="app">
-      {view === 'folder' ? (
-        <FolderView />
-      ) : currentNote?.type === 'Markdown' ? (
-        <MarkdownView />
+      {isPublicView ? (
+        // Public view only shows the note content
+        currentNote?.type === 'Markdown' ? (
+          <MarkdownView note={currentNote} readOnly={true} />
+        ) : (
+          <TldrawView note={currentNote} readOnly={true} />
+        )
       ) : (
-        <TldrawView />
+        // Private authenticated view
+        view === 'folder' ? (
+          <FolderView />
+        ) : currentNote?.type === 'Markdown' ? (
+          <MarkdownView note={currentNote} />
+        ) : (
+          <TldrawView note={currentNote} />
+        )
       )}
     </div>
   )
