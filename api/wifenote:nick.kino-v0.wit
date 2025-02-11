@@ -19,6 +19,15 @@ interface wifenote {
         folder-id: option<string>,
         note-type: note-type,
         content: list<u8>,  // serialized tldraw state or markdown text
+        is-public: bool,
+        collaborators: list<string>,  // list of collaborating node IDs
+    }
+
+    /// Structure for a collaboration invite
+    record invite {
+        note-id: string,
+        inviter-node-id: string,
+        note-name: string,
     }
 
     /// Compressed export data
@@ -43,6 +52,14 @@ interface wifenote {
         get-structure,  // get full folder/note tree
         export-all,  // get all data for export
         import-all(compressed-bytes),  // import compressed data
+
+        /// Note sharing operations
+        set-note-public(tuple<string, bool>),  // (note id, is public)
+        invite-collaborator(tuple<string, string>),  // (note id, node id)
+        remove-collaborator(tuple<string, string>),  // (note id, node id)
+        accept-invite(tuple<string, string>),  // (note id, inviter node id)
+        reject-invite(tuple<string, string>),  // (note id, inviter node id)
+        get-invites,  // returns list of pending invites
     }
 
     variant response {
@@ -64,6 +81,14 @@ interface wifenote {
         get-structure(result<tuple<list<folder>, list<note>>, string>),
         export-all(result<compressed-bytes, string>),
         import-all(result<_, string>),
+
+        /// Note sharing responses
+        set-note-public(result<note, string>),
+        invite-collaborator(result<note, string>),
+        remove-collaborator(result<note, string>),
+        accept-invite(result<note, string>),
+        reject-invite(result<_, string>),
+        get-invites(result<list<invite>, string>),
     }
 }
 

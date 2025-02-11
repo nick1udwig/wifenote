@@ -9,12 +9,15 @@ import {
 } from '@tldraw/tldraw';
 import useTlDrawStore from '../store/tldraw';
 import { UpdateNoteContentRequest } from '../types/TlDraw';
+import { Settings } from 'lucide-react';
+import SettingsPane from './SettingsPane';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
 const TldrawView: React.FC = () => {
-  const { currentNote, setView } = useTlDrawStore();
+  const { currentNote, setView, updateNote } = useTlDrawStore();
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load content when note changes
   useEffect(() => {
@@ -87,6 +90,23 @@ const TldrawView: React.FC = () => {
   const handleMount = useCallback((newEditor: Editor) => {
     console.log('Editor mounted');
     setEditor(newEditor);
+
+    // If this is a public note view, load it in read-only mode
+    if (window.readOnlyNote) {
+      const { content } = window.readOnlyNote;
+      const contentStr = new TextDecoder().decode(new Uint8Array(content));
+      const storedSnapshot = JSON.parse(contentStr);
+      
+      newEditor.setCurrentTool('select');
+      loadSnapshot(newEditor.store, storedSnapshot);
+      
+      // Disable editing
+      newEditor.updateInstanceState({ isReadonly: true });
+      
+      // Hide toolbar in read-only mode
+      const toolbar = document.querySelector('.toolbar') as HTMLDivElement;
+      if (toolbar) toolbar.style.display = 'none';
+    }
   }, []);
 
   return (
@@ -94,7 +114,21 @@ const TldrawView: React.FC = () => {
       <div className="toolbar">
         <span className="note-name">{currentNote?.name}</span>
         <button onClick={() => setView('folder')}>← Back to Folders</button>
+        {currentNote && (
+          <button onClick={() => setShowSettings(true)} title="Settings">
+            <Settings size={16} />
+          </button>
+        )}
       </div>
+      {showSettings && currentNote && (
+        <SettingsPane
+          note={currentNote}
+          onClose={() => setShowSettings(false)}
+          onNoteUpdated={(updatedNote) => {
+            updateNote(updatedNote);
+          }}
+        />
+      )}
       <div className="tldraw-canvas">
         <Tldraw
           onMount={handleMount}

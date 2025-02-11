@@ -12,6 +12,18 @@ const MarkdownView: React.FC = () => {
 
   // Load content when note changes
   useEffect(() => {
+    // Check if this is a public note view
+    if (window.readOnlyNote) {
+      const { content: readOnlyContent } = window.readOnlyNote;
+      const contentStr = new TextDecoder().decode(new Uint8Array(readOnlyContent));
+      setContent(contentStr);
+      setPreview(true); // Force preview mode for read-only view
+      // Hide toolbar in read-only mode
+      const toolbar = document.querySelector('.toolbar') as HTMLDivElement;
+      if (toolbar) toolbar.style.display = 'none';
+      return;
+    }
+
     const loadContent = async () => {
       if (!currentNote) return;
       
@@ -90,6 +102,7 @@ const MarkdownView: React.FC = () => {
             spellCheck={false}
             autoFocus
             style={{ fontSize: '16px' }}
+            readOnly={window.readOnlyNote !== undefined}
           />
         )}
       </div>

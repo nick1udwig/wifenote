@@ -45,6 +45,8 @@ function App() {
             'folder-id': n.folder_id, // Convert snake_case to kebab-case
             content: n.content,
             type: n.note_type,
+            isPublic: n.is_public,
+            collaborators: n.collaborators,
           }));
 
           console.log('Initial structure:', { transformedFolders, transformedNotes });
@@ -81,13 +83,15 @@ function App() {
                   'parent-id': f.parent_id // Convert snake_case to kebab-case
                 }));
 
-                const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
-                  id: n.id,
-                  name: n.name,
-                  'folder-id': n.folder_id, // Convert snake_case to kebab-case
-                  content: n.content,
-                  type: n.note_type
-                }));
+                  const transformedNotes = (notes as ApiNote[]).map((n: ApiNote): TlDrawNote => ({
+                    id: n.id,
+                    name: n.name,
+                    'folder-id': n.folder_id, // Convert snake_case to kebab-case
+                    content: n.content,
+                    type: n.note_type,
+                    isPublic: n.is_public,
+                    collaborators: n.collaborators,
+                  }));
 
                 // Re-apply the transform and update state
                 setStructure(transformedFolders, transformedNotes);

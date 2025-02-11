@@ -244,7 +244,9 @@ const FolderView: React.FC = () => {
           name: n.name,
           'folder-id': n.folder_id,
           content: n.content,
-          type: n.note_type
+          type: n.note_type,
+          isPublic: n.is_public,
+          collaborators: n.collaborators
         }));
 
         setStructure(transformedFolders, transformedNotes);
