@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { TlDrawNote } from '../types/TlDraw';
 import './TldrawView.css';
-import { 
-  Tldraw, 
+import {
+  Tldraw,
   TLUiEventHandler,
   Editor,
   getSnapshot,
@@ -31,24 +31,37 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
   useEffect(() => {
     const loadContent = async () => {
       if (!currentNoteToUse || !editor) return;
-      
+
       try {
-        console.log('Loading note:', currentNoteToUse.id);
-        const response = await fetch(`${BASE_URL}/api`, {
-          method: 'POST',
-          body: JSON.stringify({ GetNote: currentNoteToUse.id }),
-        });
-        const data = await response.json();
-        console.log('Load response:', data);
-        
-        if (data.GetNote.Ok) {
-          const { content } = data.GetNote.Ok;
-          const contentStr = new TextDecoder().decode(new Uint8Array(content));
-          const storedSnapshot = JSON.parse(contentStr);
-          console.log('Loading snapshot:', storedSnapshot);
-          
-          editor.setCurrentTool('select');
-          loadSnapshot(editor.store, storedSnapshot);
+        if (readOnly) {
+          console.log('Loading note:', currentNoteToUse.id);
+          if (note) {
+            const { content } = note;
+            const contentStr = new TextDecoder().decode(new Uint8Array(content));
+            const storedSnapshot = JSON.parse(contentStr);
+            console.log('Loading snapshot:', storedSnapshot);
+
+            editor.setCurrentTool('select');
+            loadSnapshot(editor.store, storedSnapshot);
+          }
+        } else {
+          console.log('Loading note:', currentNoteToUse.id);
+          const response = await fetch(`${BASE_URL}/api`, {
+            method: 'POST',
+            body: JSON.stringify({ GetNote: currentNoteToUse.id }),
+          });
+          const data = await response.json();
+          console.log('Load response:', data);
+
+          if (data.GetNote.Ok) {
+            const { content } = data.GetNote.Ok;
+            const contentStr = new TextDecoder().decode(new Uint8Array(content));
+            const storedSnapshot = JSON.parse(contentStr);
+            console.log('Loading snapshot:', storedSnapshot);
+
+            editor.setCurrentTool('select');
+            loadSnapshot(editor.store, storedSnapshot);
+          }
         }
       } catch (error) {
         console.error('Failed to load note content:', error);
@@ -58,7 +71,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
     loadContent();
   }, [currentNoteToUse?.id, editor]);
 
-  // Save changes to backend 
+  // Save changes to backend
   useEffect(() => {
     if (!editor || !currentNoteToUse || readOnly) return;
 
@@ -68,7 +81,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
           console.log('Store update from user:', update);
           const snapshot = getSnapshot(editor.store);
           console.log('Saving snapshot:', snapshot);
-          
+
           const contentBytes = Array.from(new TextEncoder().encode(JSON.stringify(snapshot)));
           const request: UpdateNoteContentRequest = {
             UpdateNoteContent: [currentNoteToUse.id, contentBytes]

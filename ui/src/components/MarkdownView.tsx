@@ -24,11 +24,12 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onE
   // Load content when note changes
   useEffect(() => {
     // Check if this is a public note view
-    if (window.readOnlyNote) {
-      const { content: readOnlyContent } = window.readOnlyNote;
+    if (readOnly && note) {
+      const { content: readOnlyContent } = note;
       const contentStr = new TextDecoder().decode(new Uint8Array(readOnlyContent));
       setContent(contentStr);
-      setPreview(true); // Force preview mode for read-only view
+      // Force preview mode for read-only view
+      setPreview(true);
       // Hide toolbar in read-only mode
       const toolbar = document.querySelector('.toolbar') as HTMLDivElement;
       if (toolbar) toolbar.style.display = 'none';
@@ -37,7 +38,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onE
 
     const loadContent = async () => {
       if (!currentNoteToUse) return;
-      
+
       try {
         console.log('Loading note:', currentNoteToUse.id);
         const response = await fetch(`${BASE_URL}/api`, {
@@ -46,7 +47,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onE
         });
         const data = await response.json();
         console.log('Load response:', data);
-        
+
         if (data.GetNote.Ok) {
           const { content } = data.GetNote.Ok;
           // For MD notes, content is stored as UTF-8 text directly

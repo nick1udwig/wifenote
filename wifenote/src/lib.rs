@@ -170,30 +170,15 @@ fn handle_http_request(
 
                     // Handle public note access through public server
                     if is_public {
+                        // For backward compatibility, support both GET and POST
                         if let Some(note_id) = http_request.path()?.strip_prefix("/public/") {
                             let mut headers = HashMap::new();
+                            headers
+                                .insert("Content-Type".to_string(), "application/json".to_string());
 
-                            // Handle unauthorized/not found response
-                            let mut send_unauthorized = || {
-                                headers.insert("Content-Type".to_string(), "text/html".to_string());
-                                http::server::send_response(
-                                    http::StatusCode::FORBIDDEN,
-                                    Some(headers.clone()),
-                                    "<html><body><h1>No note or unauthorized</h1></body></html>"
-                                        .as_bytes()
-                                        .to_vec(),
-                                )
-                            };
-
-                            // Check if note exists and is public
-                            if let Some(note) = state.notes.get(note_id) {
+                            let result = if let Some(note) = state.notes.get(note_id) {
                                 if note.is_public {
-                                    headers.insert(
-                                        "Content-Type".to_string(),
-                                        "application/json".to_string(),
-                                    );
-                                    // Return only the necessary public note data
-                                    let public_note = Note {
+                                    Ok(Note {
                                         id: note.id.clone(),
                                         name: note.name.clone(),
                                         folder_id: None, // Don't expose folder structure
@@ -201,18 +186,29 @@ fn handle_http_request(
                                         note_type: note.note_type.clone(),
                                         is_public: true,
                                         collaborators: Vec::new(), // Don't expose collaborators
-                                    };
-                                    http::server::send_response(
-                                        http::StatusCode::OK,
-                                        Some(headers),
-                                        serde_json::to_vec(&public_note)?,
-                                    );
+                                    })
                                 } else {
-                                    send_unauthorized();
+                                    Err("Note is not public".to_string())
                                 }
                             } else {
-                                send_unauthorized();
-                            }
+                                Err("Note not found".to_string())
+                            };
+
+                            let (status_code, response) = match result {
+                                Ok(note) => {
+                                    (http::StatusCode::OK, serde_json::json!({ "Ok": note }))
+                                }
+                                Err(msg) => (
+                                    http::StatusCode::NOT_FOUND,
+                                    serde_json::json!({ "Err": msg }),
+                                ),
+                            };
+
+                            http::server::send_response(
+                                status_code,
+                                Some(headers),
+                                serde_json::to_vec(&response)?,
+                            );
                             return Ok(());
                         }
                     }
@@ -227,11 +223,87 @@ fn handle_http_request(
                     );
                 }
                 http::Method::POST => {
+                    // Handle public note access via POST
                     if is_public {
+                        if http_request.path()? == "/public" {
+                            let Some(body) = last_blob() else {
+                                http::server::send_response(
+                                    http::StatusCode::BAD_REQUEST,
+                                    None,
+                                    "Missing request body".as_bytes().to_vec(),
+                                );
+                                return Ok(());
+                            };
+
+                            // Parse request body
+                            let req: serde_json::Value = match serde_json::from_slice(&body.bytes) {
+                                Ok(req) => req,
+                                Err(_) => {
+                                    http::server::send_response(
+                                        http::StatusCode::BAD_REQUEST,
+                                        None,
+                                        "Invalid JSON".as_bytes().to_vec(),
+                                    );
+                                    return Ok(());
+                                }
+                            };
+
+                            let note_id = match req.get("note_id").and_then(|v| v.as_str()) {
+                                Some(id) => id,
+                                None => {
+                                    http::server::send_response(
+                                        http::StatusCode::BAD_REQUEST,
+                                        None,
+                                        "Missing note_id".as_bytes().to_vec(),
+                                    );
+                                    return Ok(());
+                                }
+                            };
+
+                            let mut headers = HashMap::new();
+                            headers
+                                .insert("Content-Type".to_string(), "application/json".to_string());
+
+                            let result = if let Some(note) = state.notes.get(note_id) {
+                                if note.is_public {
+                                    Ok(Note {
+                                        id: note.id.clone(),
+                                        name: note.name.clone(),
+                                        folder_id: None, // Don't expose folder structure
+                                        content: note.content.clone(),
+                                        note_type: note.note_type.clone(),
+                                        is_public: true,
+                                        collaborators: Vec::new(), // Don't expose collaborators
+                                    })
+                                } else {
+                                    Err("Note is not public".to_string())
+                                }
+                            } else {
+                                Err("Note not found".to_string())
+                            };
+
+                            let (status_code, response) = match result {
+                                Ok(note) => {
+                                    (http::StatusCode::OK, serde_json::json!({ "Ok": note }))
+                                }
+                                Err(msg) => (
+                                    http::StatusCode::NOT_FOUND,
+                                    serde_json::json!({ "Err": msg }),
+                                ),
+                            };
+
+                            http::server::send_response(
+                                status_code,
+                                Some(headers),
+                                serde_json::to_vec(&response)?,
+                            );
+                            return Ok(());
+                        }
+
                         http::server::send_response(
-                            http::StatusCode::METHOD_NOT_ALLOWED,
+                            http::StatusCode::NOT_FOUND,
                             None,
-                            "Public POST not allowed".as_bytes().to_vec(),
+                            "Invalid path".as_bytes().to_vec(),
                         );
                         return Ok(());
                     }
@@ -692,7 +764,6 @@ fn init(our: Address) {
     let mut server = http::server::HttpServer::new(5);
     // Private endpoints
     let private_config = http::server::HttpBindingConfig::default();
-    //let private_config = http::server::HttpBindingConfig::default().authenticated(false);
     server
         .bind_http_path("/api", private_config.clone())
         .unwrap();
@@ -703,10 +774,10 @@ fn init(our: Address) {
     // Public endpoints
     let public_config = http::server::HttpBindingConfig::default().authenticated(false);
     server
-        .serve_ui("ui", vec!["/"], public_config.clone())
+        .bind_http_path("/public", public_config.clone())
         .unwrap();
     server
-        .bind_http_path("/public", public_config.clone())
+        .serve_ui("ui", vec!["/"], public_config.clone())
         .unwrap();
 
     kinode_process_lib::homepage::add_to_homepage("wifenote", Some(ICON), Some(""), None);

@@ -26,13 +26,21 @@ function App() {
   useEffect(() => {
     const path = window.location.pathname;
     const noteIdMatch = path.match(/\/public\/(.+)$/);
+    console.log(`path, noteIdMatch: ${path}, ${noteIdMatch}`);
 
     if (noteIdMatch) {
       setIsPublicView(true);
       const noteId = noteIdMatch[1];
 
+      console.log(`fetching ${noteId} from ${BASE_URL}/public...`);
       // Fetch public note using the public API
-      fetch(`${BASE_URL}/public/${noteId}`)
+      fetch(`${BASE_URL}/public`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ note_id: noteId }),
+      })
         .then(response => {
           if (!response.ok) {
             throw new Error('Note not found or not public');
@@ -40,15 +48,17 @@ function App() {
           return response.json();
         })
         .then(note => {
+          const noteOk = note.Ok;
           const transformedNote: TlDrawNote = {
-            id: note.id,
-            name: note.name,
-            'folder-id': note.folder_id,
-            content: note.content,
-            type: note.note_type,
-            isPublic: note.is_public,
-            collaborators: note.collaborators,
+            id: noteOk.id,
+            name: noteOk.name,
+            'folder-id': noteOk.folder_id,
+            content: noteOk.content,
+            type: noteOk.note_type,
+            isPublic: noteOk.is_public,
+            collaborators: noteOk.collaborators,
           };
+          console.log(`got tldrawnote ${JSON.stringify(transformedNote)} from ${BASE_URL}/public/${noteId}...`);
           setCurrentNote(transformedNote);
         })
         .catch(error => {
@@ -178,6 +188,7 @@ function App() {
     )
   }
 
+  console.log(`isPublicView, currentNote: ${isPublicView}, ${JSON.stringify(currentNote)}`);
   return (
     <div className="app">
       {isPublicView ? (
