@@ -148,18 +148,12 @@ fn migrate_export_data(mut data: ExportData) -> anyhow::Result<ExportData> {
 fn handle_http_request(
     req: HttpServerRequest,
     state: &mut State,
-    private_server: &mut http::server::HttpServer,
-    public_server: &mut http::server::HttpServer,
+    server: &mut http::server::HttpServer,
 ) -> anyhow::Result<()> {
-    // Extract server depending on the path
-    let (server, is_public) = if let HttpServerRequest::Http(ref http_request) = req {
-        if http_request.path()?.starts_with("/public") {
-            (public_server, true)
-        } else {
-            (private_server, false)
-        }
+    let is_public = if let HttpServerRequest::Http(ref http_request) = req {
+        http_request.path()?.starts_with("/public")
     } else {
-        (private_server, false)
+        false
     };
 
     match req {
@@ -654,17 +648,16 @@ fn handle_note_request(
 fn handle_message(
     message: &Message,
     state: &mut State,
-    private_server: &mut http::server::HttpServer,
-    public_server: &mut http::server::HttpServer,
+    server: &mut http::server::HttpServer,
 ) -> anyhow::Result<()> {
     match message.body().try_into()? {
         Msg::NoteRequest(req) => {
             let resp = handle_note_request(req, Some(message.source()), state)?;
             Response::new().body(resp).send()?;
         }
-        Msg::HttpRequest(req) => handle_http_request(req, state, private_server, public_server)?,
+        Msg::HttpRequest(req) => handle_http_request(req, state, server)?,
     }
-    private_server.ws_push_all_channels(
+    server.ws_push_all_channels(
         "/",
         http::server::WsMessageType::Text,
         LazyLoadBlob {
@@ -692,23 +685,23 @@ fn init(our: Address) {
     });
 
     // Set up HTTP server
-    // Private server for authenticated access
-    let mut private_server = http::server::HttpServer::new(5);
+    let mut server = http::server::HttpServer::new(5);
+    // Private endpoints
     let private_config = http::server::HttpBindingConfig::default();
-    private_server
+    //let private_config = http::server::HttpBindingConfig::default().authenticated(false);
+    server
         .bind_http_path("/api", private_config.clone())
         .unwrap();
-    private_server
-        .serve_ui("ui", vec!["/"], private_config.clone())
-        .unwrap();
-    private_server
-        .bind_ws_path("/", http::server::WsBindingConfig::new(false, false, false))
+    server
+        .bind_ws_path("/", http::server::WsBindingConfig::default())
         .unwrap();
 
-    // Public server for public note access
-    let mut public_server = http::server::HttpServer::new(5);
-    let public_config = http::server::HttpBindingConfig::new(false, false, false, None);
-    public_server
+    // Public endpoints
+    let public_config = http::server::HttpBindingConfig::default().authenticated(false);
+    server
+        .serve_ui("ui", vec!["/"], public_config.clone())
+        .unwrap();
+    server
         .bind_http_path("/public", public_config.clone())
         .unwrap();
 
@@ -717,12 +710,10 @@ fn init(our: Address) {
     loop {
         match await_message() {
             Err(send_error) => error!("got SendError: {send_error}"),
-            Ok(ref message) => {
-                match handle_message(message, &mut state, &mut private_server, &mut public_server) {
-                    Ok(_) => {}
-                    Err(e) => error!("got error while handling message: {e:?}"),
-                }
-            }
+            Ok(ref message) => match handle_message(message, &mut state, &mut server) {
+                Ok(_) => {}
+                Err(e) => error!("got error while handling message: {e:?}"),
+            },
         }
     }
 }
