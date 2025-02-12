@@ -73,7 +73,12 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
       const data = await response.json();
       if (data.SetNotePublic?.Ok) {
         setIsPublic(!isPublic);
-        onNoteUpdated(data.SetNotePublic.Ok);
+        // Keep the same type when updating the note's public status
+        const updatedNote = {
+          ...data.SetNotePublic.Ok,
+          type: note.type
+        };
+        onNoteUpdated(updatedNote);
       } else {
         setError(data.SetNotePublic?.Err || 'Failed to update note visibility');
       }

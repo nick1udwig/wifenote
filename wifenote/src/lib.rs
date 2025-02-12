@@ -171,10 +171,23 @@ fn handle_http_request(
                     // Handle public note access through public server
                     if is_public {
                         if let Some(note_id) = http_request.path()?.strip_prefix("/public/") {
-                            // Only allow GET requests to public notes through public server
+                            let mut headers = HashMap::new();
+
+                            // Handle unauthorized/not found response
+                            let mut send_unauthorized = || {
+                                headers.insert("Content-Type".to_string(), "text/html".to_string());
+                                http::server::send_response(
+                                    http::StatusCode::FORBIDDEN,
+                                    Some(headers.clone()),
+                                    "<html><body><h1>No note or unauthorized</h1></body></html>"
+                                        .as_bytes()
+                                        .to_vec(),
+                                )
+                            };
+
+                            // Check if note exists and is public
                             if let Some(note) = state.notes.get(note_id) {
                                 if note.is_public {
-                                    let mut headers = HashMap::new();
                                     headers.insert(
                                         "Content-Type".to_string(),
                                         "application/json".to_string(),
@@ -195,22 +208,13 @@ fn handle_http_request(
                                         serde_json::to_vec(&public_note)?,
                                     );
                                 } else {
-                                    http::server::send_response(
-                                        http::StatusCode::NOT_FOUND,
-                                        None,
-                                        "Note not found or not public".as_bytes().to_vec(),
-                                    );
+                                    send_unauthorized();
                                 }
-                                return Ok(());
+                            } else {
+                                send_unauthorized();
                             }
+                            return Ok(());
                         }
-                        // Return 404 for any other public server requests
-                        http::server::send_response(
-                            http::StatusCode::NOT_FOUND,
-                            None,
-                            "Not found".as_bytes().to_vec(),
-                        );
-                        return Ok(());
                     }
 
                     // Serve static files for all other GET requests
