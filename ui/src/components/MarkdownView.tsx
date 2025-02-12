@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import useTlDrawStore from '../store/tldraw';
 import ReactMarkdown from 'react-markdown';
 import { TlDrawNote } from '../types/TlDraw';
+import { Settings } from 'lucide-react';
+import SettingsPane from './SettingsPane';
 import './MarkdownView.css';
 
 const BASE_URL = import.meta.env.BASE_URL;
@@ -13,10 +15,11 @@ interface MarkdownViewProps {
 }
 
 const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onEdit }) => {
-  const { currentNote, setView } = useTlDrawStore();
+  const { currentNote, setView, updateNote } = useTlDrawStore();
   const currentNoteToUse = note || currentNote;
   const [content, setContent] = useState('');
   const [preview, setPreview] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load content when note changes
   useEffect(() => {
@@ -98,9 +101,23 @@ const MarkdownView: React.FC<MarkdownViewProps> = ({ note, readOnly = false, onE
               {preview ? 'Edit' : 'Preview'}
             </button>
             <button onClick={() => onEdit ? onEdit() : setView('folder')}>← Back to Folders</button>
+            {currentNoteToUse && (
+              <button onClick={() => setShowSettings(true)} title="Settings">
+                <Settings size={16} />
+              </button>
+            )}
           </>
         )}
       </div>
+      {showSettings && currentNoteToUse && !readOnly && (
+        <SettingsPane
+          note={currentNoteToUse}
+          onClose={() => setShowSettings(false)}
+          onNoteUpdated={(updatedNote) => {
+            updateNote(updatedNote);
+          }}
+        />
+      )}
       <div className="markdown-content">
         {preview ? (
           <div className="preview-pane">

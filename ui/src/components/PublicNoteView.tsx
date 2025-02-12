@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import MarkdownView from './MarkdownView';
 import TldrawView from './TldrawView';
+import NotFoundView from './NotFoundView';
 import { TlDrawNote } from '../types/TlDraw';
 
 const BASE_URL = import.meta.env.BASE_URL;
@@ -39,7 +40,7 @@ const PublicNoteView: React.FC = () => {
   }
 
   if (error || !note) {
-    return <div className="error">{error || 'Note not found'}</div>;
+    return <NotFoundView />;
   }
 
   return (
