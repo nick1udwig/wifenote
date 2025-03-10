@@ -4,18 +4,18 @@ use std::io::prelude::*;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 
-use crate::kinode::process::wifenote::{
+use crate::hyperware::process::wifenote::{
     Folder, Note, Request as NoteRequest, Response as NoteResponse,
 };
-use kinode_process_lib::logging::{debug, error, info, init_logging, Level};
-use kinode_process_lib::{
+use hyperware_process_lib::logging::{debug, error, info, init_logging, Level};
+use hyperware_process_lib::{
     await_message, call_init, http, http::server::HttpServerRequest, last_blob, vfs, Address,
     LazyLoadBlob, Message, Response,
 };
 
 wit_bindgen::generate!({
     path: "target/wit",
-    world: "wifenote-nick-dot-kino-v0",
+    world: "wifenote-nick-dot-hypr-v0",
     generate_unused_types: true,
     additional_derives: [serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto],
 });
@@ -485,7 +485,7 @@ fn init(our: Address) {
         .bind_ws_path("/", http::server::WsBindingConfig::new(false, false, false))
         .unwrap();
 
-    kinode_process_lib::homepage::add_to_homepage("wifenote", Some(ICON), Some(""), None);
+    hyperware_process_lib::homepage::add_to_homepage("wifenote", Some(ICON), Some(""), None);
 
     loop {
         match await_message() {
