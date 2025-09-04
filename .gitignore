@@ -1,5 +1,6 @@
 */target/
 /target
+docs/
 pkg/*.wasm
 pkg/*.zip
 pkg/ui

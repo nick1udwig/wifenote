@@ -92,7 +92,7 @@ interface wifenote {
     }
 }
 
-world wifenote-nick-dot-kino-v0 {
+world wifenote-nick-dot-hypr-v0 {
     import wifenote;
     include process-v1;
 }

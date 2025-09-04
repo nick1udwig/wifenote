@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import KinodeClientApi from "@kinode/client-api"
+import HyperwareClientApi from "@hyperware-ai/client-api"
 import "./App.css"
 import useTlDrawStore from "./store/tldraw"
 import FolderView from "./components/FolderView"
@@ -121,7 +121,7 @@ function App() {
 
     // Connect to the Kinode via websocket
     if (window.our?.node && window.our?.process) {
-      new KinodeClientApi({
+      new HyperwareClientApi({
         uri: WEBSOCKET_URL,
         nodeId: window.our.node,
         processId: window.our.process,
