@@ -10,37 +10,56 @@
   overflow: hidden;
 }
 
-.tldraw-view .toolbar {
-  height: 40px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 4px 16px;
+.custom-top-zone {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  pointer-events: all;
+  z-index: 1000;
 }
 
-.tldraw-view .toolbar button {
+.custom-top-zone .back-button,
+.custom-top-zone .settings-button {
   padding: 6px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid #e5e5e5;
   border-radius: 4px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: white;
+  color: #333;
   cursor: pointer;
   font-size: 14px;
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: background-color 0.2s;
+  pointer-events: all;
 }
 
-.tldraw-view .toolbar button:hover {
-  background: var(--bg-tertiary);
+.custom-top-zone .back-button:hover,
+.custom-top-zone .settings-button:hover {
+  background: #f5f5f5;
 }
 
-.tldraw-view .toolbar .note-name {
-  font-weight: 500;
-  color: var(--text-primary);
-  flex: 1;
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .custom-top-zone {
+    background: rgba(32, 32, 32, 0.9);
+  }
+  
+  .custom-top-zone .back-button,
+  .custom-top-zone .settings-button {
+    background: #2c2c2c;
+    color: #e5e5e5;
+    border-color: #444;
+  }
+  
+  .custom-top-zone .back-button:hover,
+  .custom-top-zone .settings-button:hover {
+    background: #3c3c3c;
+  }
 }
 
 .tldraw-canvas {

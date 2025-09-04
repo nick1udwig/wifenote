@@ -7,7 +7,9 @@ import {
   Editor,
   getSnapshot,
   loadSnapshot,
-} from '@tldraw/tldraw';
+  TLComponents,
+  StoreListener,
+} from 'tldraw';
 import useTlDrawStore from '../store/tldraw';
 import { UpdateNoteContentRequest } from '../types/TlDraw';
 import { Settings } from 'lucide-react';
@@ -26,6 +28,35 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
   const currentNoteToUse = note || currentNote;
   const [editor, setEditor] = useState<Editor | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Custom TopZone component
+  const CustomTopZone = useCallback(() => {
+    if (readOnly) return null;
+    
+    return (
+      <div className="custom-top-zone">
+        <button 
+          onClick={() => onEdit ? onEdit() : setView('folder')}
+          className="back-button"
+        >
+          ← Back to Folders
+        </button>
+        {currentNoteToUse && (
+          <button 
+            onClick={() => setShowSettings(true)} 
+            title="Settings"
+            className="settings-button"
+          >
+            <Settings size={16} />
+          </button>
+        )}
+      </div>
+    );
+  }, [readOnly, onEdit, setView, currentNoteToUse, setShowSettings]);
+
+  const components: TLComponents = {
+    TopPanel: CustomTopZone,
+  };
 
   // Load content when note changes
   useEffect(() => {
@@ -76,7 +107,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
     if (!editor || !currentNoteToUse || readOnly) return;
 
     const unlisten = editor.store.listen(
-      (update) => {
+      ((update: any) => {
         if (update.source === 'user') {
           console.log('Store update from user:', update);
           const snapshot = getSnapshot(editor.store);
@@ -95,7 +126,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
           .then(result => console.log('Save result:', result))
           .catch(error => console.error('Save failed:', error));
         }
-      },
+      }) as StoreListener<any>,
       { source: 'user', scope: 'document' }
     );
 
@@ -103,7 +134,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
   }, [editor, currentNoteToUse, readOnly]);
 
   // Handle UI events (tool changes etc)
-  const handleChange: TLUiEventHandler = useCallback((name) => {
+  const handleChange: TLUiEventHandler = useCallback((name: string) => {
     console.log('UI event:', name);
   }, []);
 
@@ -120,17 +151,6 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
 
   return (
     <div className="tldraw-view">
-      <div className="toolbar">
-        <span className="note-name">{currentNoteToUse?.name}</span>
-        {!readOnly && (
-          <button onClick={() => onEdit ? onEdit() : setView('folder')}>← Back to Folders</button>
-        )}
-        {currentNoteToUse && !readOnly && (
-          <button onClick={() => setShowSettings(true)} title="Settings">
-            <Settings size={16} />
-          </button>
-        )}
-      </div>
       {showSettings && currentNoteToUse && !readOnly && (
         <SettingsPane
           note={currentNoteToUse}
@@ -144,6 +164,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
         <Tldraw
           onMount={handleMount}
           onUiEvent={handleChange}
+          components={components}
           autoFocus
           inferDarkMode
         />
