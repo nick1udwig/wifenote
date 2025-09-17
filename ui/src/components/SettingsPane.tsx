@@ -65,14 +65,17 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
   };
 
   const handlePublicToggle = async () => {
+    const newPublicState = !isPublic;
+    // Optimistically update the UI
+    setIsPublic(newPublicState);
+
     try {
       const response = await fetch(`${BASE_URL}/api`, {
         method: 'POST',
-        body: JSON.stringify({ SetNotePublic: [note.id, !isPublic] }),
+        body: JSON.stringify({ SetNotePublic: [note.id, newPublicState] }),
       });
       const data = await response.json();
       if (data.SetNotePublic?.Ok) {
-        setIsPublic(!isPublic);
         // Keep the same type when updating the note's public status
         const updatedNote = {
           ...data.SetNotePublic.Ok,
@@ -80,10 +83,14 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
         };
         onNoteUpdated(updatedNote);
       } else {
+        // Revert on error
+        setIsPublic(!newPublicState);
         setError(data.SetNotePublic?.Err || 'Failed to update note visibility');
       }
     } catch (error) {
       console.error('Failed to toggle public status:', error);
+      // Revert on error
+      setIsPublic(!newPublicState);
       setError('Failed to update note visibility');
     }
   };
