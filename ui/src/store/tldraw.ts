@@ -1,20 +1,14 @@
 import { create } from 'zustand';
-import { TlDrawNote, TlDrawFolder } from '../types/TlDraw';
+import { TlDrawFolder, TlDrawNote, Invite } from '../types/TlDraw';
 
 const BASE_URL = import.meta.env.BASE_URL;
 
-// Helper function for making API calls
-const apiCall = async (request: any) => {
+const apiCall = async (body: unknown) => {
   try {
     const response = await fetch(`${BASE_URL}/api`, {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
     });
-
-    if (!response.ok) {
-      throw new Error('API call failed');
-    }
-
     return await response.json();
   } catch (error) {
     console.error('API error:', error);
@@ -30,6 +24,7 @@ interface TlDrawStore {
   dragging?: { type: 'note' | 'folder'; id: string };
   isLoading: boolean;
   error: string | null;
+  collaborationInvites: Invite[];
 
   // Basic setters
   set: (updates: Partial<TlDrawStore>) => void;
@@ -39,20 +34,29 @@ interface TlDrawStore {
   setDragging: (dragging?: { type: 'note' | 'folder'; id: string }) => void;
   setError: (error: string | null) => void;
   setLoading: (isLoading: boolean) => void;
+  setCollaborationInvites: (invites: Invite[]) => void;
 
   // Note operations
   addNote: (note: TlDrawNote) => void;
-  updateNote: (id: string, updates: Partial<TlDrawNote>) => void;
-  deleteNote: (id: string) => void;
-  moveNote: (id: string, folderId: string | null) => void;
-  renameNote: (id: string, name: string) => void;
+  updateNote: (note: TlDrawNote) => void;
+  deleteNote: (id: string) => Promise<void>;
+  moveNote: (id: string, folderId: string | null) => Promise<void>;
+  renameNote: (id: string, name: string) => Promise<void>;
 
   // Folder operations
   addFolder: (folder: TlDrawFolder) => void;
   updateFolder: (id: string, updates: Partial<TlDrawFolder>) => void;
   deleteFolder: (id: string) => void;
-  moveFolder: (id: string, parentId: string | null) => void;
-  renameFolder: (id: string, name: string) => void;
+  moveFolder: (id: string, parentId: string | null) => Promise<void>;
+  renameFolder: (id: string, name: string) => Promise<void>;
+
+  // Note sharing operations
+  setNotePublic: (noteId: string, isPublic: boolean) => Promise<void>;
+  inviteCollaborator: (noteId: string, nodeId: string) => Promise<void>;
+  removeCollaborator: (noteId: string, nodeId: string) => Promise<void>;
+  acceptInvite: (noteId: string, inviterNodeId: string) => Promise<void>;
+  rejectInvite: (noteId: string, inviterNodeId: string) => Promise<void>;
+  getInvites: () => Promise<void>;
 
   // Helper functions
   getChildFolders: (parentId: string | null) => TlDrawFolder[];
@@ -67,6 +71,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   dragging: undefined,
   isLoading: false,
   error: null,
+  collaborationInvites: [],
 
   // Basic setters
   set: (updates) => set(updates),
@@ -77,72 +82,37 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
       folders,
       notes,
       isLoading: false,
-      error: null
     });
   },
   setCurrentNote: (note) => set({ currentNote: note }),
   setDragging: (dragging) => set({ dragging }),
   setError: (error) => set({ error }),
   setLoading: (isLoading) => set({ isLoading }),
+  setCollaborationInvites: (invites) => set({ collaborationInvites: invites }),
 
   // Note operations
-  addNote: async (note) => {
-    set({ isLoading: true, error: null });
-    try {
-      await apiCall({ CreateNote: [note.name, note["folder-id"], note.type] });
-      set((state) => ({ notes: [...state.notes, note] }));
-    } catch (error) {
-      set({ error: 'Failed to add note' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+  addNote: (note) => {
+    set((state) => ({
+      notes: [...state.notes, note],
+    }));
   },
 
-  updateNote: async (id, updates) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Optimistic update
-      const existingNote = get().notes.find(note => note.id === id);
-      if (!existingNote) throw new Error('Note not found');
-
-      const updatedNote = { ...existingNote, ...updates };
-      set((state) => ({
-        notes: state.notes.map((note) =>
-          note.id === id ? updatedNote : note
-        ),
-        currentNote: state.currentNote?.id === id
-          ? updatedNote
-          : state.currentNote
-      }));
-
-      await apiCall({ UpdateNote: [id, updates] });
-    } catch (error) {
-      // Rollback on error
-      set((state) => ({
-        notes: state.notes.map((note) =>
-          note.id === id ? { ...note } : note
-        )
-      }));
-      set({ error: 'Failed to update note' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+  updateNote: (updatedNote) => {
+    set((state) => ({
+      notes: state.notes.map((note) =>
+        note.id === updatedNote.id ? updatedNote : note
+      ),
+      currentNote: state.currentNote?.id === updatedNote.id ? updatedNote : state.currentNote,
+    }));
   },
 
   deleteNote: async (id) => {
     set({ isLoading: true, error: null });
     try {
-      console.log('Deleting note:', id);
-      const result = await apiCall({ DeleteNote: id });
-      console.log('Delete note response:', result);
+      await apiCall({ DeleteNote: id });
       set((state) => ({
         notes: state.notes.filter((note) => note.id !== id),
-        currentNote: state.currentNote?.id === id ? undefined : state.currentNote,
-        view: state.currentNote?.id === id ? 'folder' : state.view
       }));
-      console.log('State updated after delete');
     } catch (error) {
       set({ error: 'Failed to delete note' });
       throw error;
@@ -150,14 +120,15 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
       set({ isLoading: false });
     }
   },
+
   moveNote: async (id, folderId) => {
     set({ isLoading: true, error: null });
     try {
       await apiCall({ MoveNote: [id, folderId] });
       set((state) => ({
         notes: state.notes.map((note) =>
-          note.id === id ? { ...note, "folder-id": folderId } : note
-        )
+          note.id === id ? { ...note, 'folder-id': folderId } : note
+        ),
       }));
     } catch (error) {
       set({ error: 'Failed to move note' });
@@ -166,6 +137,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
       set({ isLoading: false });
     }
   },
+
   renameNote: async (id, name) => {
     set({ isLoading: true, error: null });
     try {
@@ -174,9 +146,6 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
         notes: state.notes.map((note) =>
           note.id === id ? { ...note, name } : note
         ),
-        currentNote: state.currentNote?.id === id
-          ? { ...state.currentNote, name }
-          : state.currentNote
       }));
     } catch (error) {
       set({ error: 'Failed to rename note' });
@@ -187,69 +156,34 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
   },
 
   // Folder operations
-  addFolder: async (folder) => {
-    set({ isLoading: true, error: null });
-    try {
-      await apiCall({ CreateFolder: [folder.name, folder["parent-id"]] });
-      set((state) => ({ folders: [...state.folders, folder] }));
-    } catch (error) {
-      set({ error: 'Failed to add folder' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+  addFolder: (folder) => {
+    set((state) => ({
+      folders: [...state.folders, folder],
+    }));
   },
 
-  updateFolder: async (id, updates) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Optimistic update
-      set((state) => ({
-        folders: state.folders.map((folder) =>
-          folder.id === id ? { ...folder, ...updates } : folder
-        )
-      }));
-
-      await apiCall({ UpdateFolder: [id, updates] });
-    } catch (error) {
-      // Rollback on error
-      set((state) => ({
-        folders: state.folders.map((folder) =>
-          folder.id === id ? { ...folder } : folder
-        )
-      }));
-      set({ error: 'Failed to update folder' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+  updateFolder: (id, updates) => {
+    set((state) => ({
+      folders: state.folders.map((folder) =>
+        folder.id === id ? { ...folder, ...updates } : folder
+      ),
+    }));
   },
 
-  deleteFolder: async (id) => {
-    set({ isLoading: true, error: null });
-    try {
-      await apiCall({ DeleteFolder: [id] });
-      set((state) => ({
-        folders: state.folders.filter((folder) => folder.id !== id),
-        notes: state.notes.map((note) =>
-          note["folder-id"] === id ? { ...note, "folder-id": null } : note
-        )
-      }));
-    } catch (error) {
-      set({ error: 'Failed to delete folder' });
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+  deleteFolder: (id) => {
+    set((state) => ({
+      folders: state.folders.filter((folder) => folder.id !== id),
+    }));
   },
+
   moveFolder: async (id, parentId) => {
     set({ isLoading: true, error: null });
     try {
       await apiCall({ MoveFolder: [id, parentId] });
       set((state) => ({
         folders: state.folders.map((folder) =>
-          folder.id === id ? { ...folder, "parent-id": parentId } : folder
-        )
+          folder.id === id ? { ...folder, 'parent-id': parentId } : folder
+        ),
       }));
     } catch (error) {
       set({ error: 'Failed to move folder' });
@@ -258,6 +192,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
       set({ isLoading: false });
     }
   },
+
   renameFolder: async (id, name) => {
     set({ isLoading: true, error: null });
     try {
@@ -265,7 +200,7 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
       set((state) => ({
         folders: state.folders.map((folder) =>
           folder.id === id ? { ...folder, name } : folder
-        )
+        ),
       }));
     } catch (error) {
       set({ error: 'Failed to rename folder' });
@@ -275,14 +210,126 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
     }
   },
 
+  // Note sharing operations
+  setNotePublic: async (noteId, isPublic) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiCall({ SetNotePublic: [noteId, isPublic] });
+      if (response.SetNotePublic?.Ok) {
+        set((state) => ({
+          notes: state.notes.map((note) =>
+            note.id === noteId ? { ...note, isPublic } : note
+          ),
+        }));
+      }
+    } catch (error) {
+      set({ error: 'Failed to update note visibility' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  inviteCollaborator: async (noteId, nodeId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiCall({ InviteCollaborator: [noteId, nodeId] });
+      if (response.InviteCollaborator?.Ok) {
+        const updatedNote = response.InviteCollaborator.Ok;
+        set((state) => ({
+          notes: state.notes.map((note) =>
+            note.id === noteId ? updatedNote : note
+          ),
+        }));
+      }
+    } catch (error) {
+      set({ error: 'Failed to invite collaborator' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  removeCollaborator: async (noteId, nodeId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiCall({ RemoveCollaborator: [noteId, nodeId] });
+      if (response.RemoveCollaborator?.Ok) {
+        const updatedNote = response.RemoveCollaborator.Ok;
+        set((state) => ({
+          notes: state.notes.map((note) =>
+            note.id === noteId ? updatedNote : note
+          ),
+        }));
+      }
+    } catch (error) {
+      set({ error: 'Failed to remove collaborator' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  acceptInvite: async (noteId, inviterNodeId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiCall({ AcceptInvite: [noteId, inviterNodeId] });
+      if (response.AcceptInvite?.Ok) {
+        const newNote = response.AcceptInvite.Ok;
+        set((state) => ({
+          notes: [...state.notes, newNote],
+          collaborationInvites: state.collaborationInvites.filter(
+          (invite) => invite.note_id !== noteId
+          ),
+        }));
+      }
+    } catch (error) {
+      set({ error: 'Failed to accept invite' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  rejectInvite: async (noteId, inviterNodeId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await apiCall({ RejectInvite: [noteId, inviterNodeId] });
+      set((state) => ({
+        collaborationInvites: state.collaborationInvites.filter(
+          (invite) => invite.note_id !== noteId
+        ),
+      }));
+    } catch (error) {
+      set({ error: 'Failed to reject invite' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  getInvites: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await apiCall({ GetInvites: null });
+      if (response.GetInvites?.Ok) {
+        set({ collaborationInvites: response.GetInvites.Ok });
+      }
+    } catch (error) {
+      set({ error: 'Failed to fetch invites' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
   // Helper functions
   getChildFolders: (parentId) => {
-    const state = get();
-    return state.folders.filter((folder) => folder["parent-id"] === parentId);
+    return get().folders.filter((folder) => folder['parent-id'] === parentId);
   },
+
   getChildNotes: (folderId) => {
-    const state = get();
-    return state.notes.filter((note) => note["folder-id"] === folderId);
+    return get().notes.filter((note) => note['folder-id'] === folderId);
   },
 }));
 

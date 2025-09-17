@@ -7,6 +7,25 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <title>wifenote</title>
     <script src="/our.js"></script>
+    <script type="text/javascript">
+      // Check if this is a public note view
+      const noteIdMatch = window.location.pathname.match(/\/notes\/([^\/]+)/);
+      if (noteIdMatch) {
+        const noteId = noteIdMatch[1];
+        // Fetch the public note
+        fetch(`/notes/${noteId}`)
+          .then(response => response.json())
+          .then(note => {
+            if (note) {
+              // Set up read-only view
+              window.readOnlyNote = note;
+            }
+          })
+          .catch(error => {
+            console.error('Failed to fetch public note:', error);
+          });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

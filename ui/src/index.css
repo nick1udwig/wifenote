@@ -23,9 +23,43 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark theme */
+/* Dark theme - when manually toggled */
+:root.dark {
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --border-color: #475569;
+  --accent-primary: #3b82f6;
+  --accent-hover: #60a5fa;
+  --folder-bg: #1e293b;
+  --note-bg: #1e293b;
+  --toolbar-bg: #1e293b;
+  --toolbar-bg-rgb: 30, 41, 59;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+}
+
+/* Light theme - when manually toggled */
+:root.light {
+  --text-primary: #2c3e50;
+  --text-secondary: #64748b;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --border-color: #e2e8f0;
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --folder-bg: #f8fafc;
+  --note-bg: #ffffff;
+  --toolbar-bg: #f8fafc;
+  --toolbar-bg-rgb: 248, 250, 252;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+}
+
+/* Auto Dark Mode - when user hasn't set a preference */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.dark):not(.light) {
     --text-primary: #e2e8f0;
     --text-secondary: #94a3b8;
     --bg-primary: #0f172a;
@@ -37,6 +71,7 @@
     --folder-bg: #1e293b;
     --note-bg: #1e293b;
     --toolbar-bg: #1e293b;
+    --toolbar-bg-rgb: 30, 41, 59;
     --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
   }
 }
