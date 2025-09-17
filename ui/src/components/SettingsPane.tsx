@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Copy, Check } from 'lucide-react';
 import { TlDrawNote } from '../types/TlDraw';
 import './SettingsPane.css';
 
@@ -22,6 +22,7 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
   const [newCollaborator, setNewCollaborator] = useState('');
   const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState(() => {
     const override = localStorage.getItem('darkMode');
@@ -163,6 +164,44 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  const handleCopyLink = async () => {
+    const shareLink = `${window.location.origin}${BASE_URL}/public/${note.id}`;
+    
+    try {
+      // Try using the modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareLink);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // Fallback method using a temporary textarea
+        const textArea = document.createElement('textarea');
+        textArea.value = shareLink;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } else {
+            throw new Error('Copy command failed');
+          }
+        } finally {
+          document.body.removeChild(textArea);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+      setError('Failed to copy link to clipboard');
+    }
+  };
+
   return (
     <div className="settings-pane">
       <div className="settings-header">
@@ -205,7 +244,14 @@ const SettingsPane: React.FC<SettingsPaneProps> = ({ note, onClose, onNoteUpdate
         </label>
         {isPublic && (
           <div className="public-link">
-            Share link: {window.location.origin}{BASE_URL}/public/{note.id}
+            <span>Share link: {window.location.origin}{BASE_URL}/public/{note.id}</span>
+            <button 
+              className="copy-button" 
+              onClick={handleCopyLink}
+              title={copied ? "Copied!" : "Copy to clipboard"}
+            >
+              {copied ? <Check size={16} /> : <Copy size={16} />}
+            </button>
           </div>
         )}
       </div>
