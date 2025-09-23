@@ -29,16 +29,53 @@ const ICON: &str = include_str!("./icon");
 // Version 1: New format with note metadata only, content in separate files
 const STATE_VERSION_WITH_SEPARATE_FILES: u32 = 1;
 
+// Wrapper for deserializing old Note format without is_public and collaborators fields
+#[derive(Debug, Deserialize)]
+struct LegacyNote {
+    id: String,
+    name: String,
+    folder_id: Option<String>,
+    note_type: NoteType,
+    content: Vec<u8>,
+    #[serde(default)]
+    is_public: bool,
+    #[serde(default)]
+    collaborators: Vec<String>,
+}
+
+impl From<LegacyNote> for Note {
+    fn from(legacy: LegacyNote) -> Self {
+        Note {
+            id: legacy.id,
+            name: legacy.name,
+            folder_id: legacy.folder_id,
+            note_type: legacy.note_type,
+            content: legacy.content,
+            is_public: legacy.is_public,
+            collaborators: legacy.collaborators,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct ExportData {
     version: u32,
     folders: Vec<Folder>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_legacy_notes")]
     notes: Vec<Note>, // For backwards compatibility with v0
     #[serde(default)]
     note_metadata: Vec<NoteMetadata>, // For v1+
     #[serde(default)]
     collaboration_invites: HashMap<String, HashMap<String, String>>,
+}
+
+// Custom deserializer that can handle both old and new Note formats
+fn deserialize_legacy_notes<'de, D>(deserializer: D) -> Result<Vec<Note>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let legacy_notes: Vec<LegacyNote> = Vec::deserialize(deserializer)?;
+    Ok(legacy_notes.into_iter().map(Note::from).collect())
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, process_macros::SerdeJsonInto)]
@@ -55,7 +92,9 @@ struct NoteMetadata {
     name: String,
     folder_id: Option<String>,
     note_type: NoteType,
+    #[serde(default)]
     is_public: bool,
+    #[serde(default)]
     collaborators: Vec<String>,
 }
 
