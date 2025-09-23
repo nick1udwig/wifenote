@@ -46,7 +46,7 @@ interface TlDrawStore {
   // Folder operations
   addFolder: (folder: TlDrawFolder) => void;
   updateFolder: (id: string, updates: Partial<TlDrawFolder>) => void;
-  deleteFolder: (id: string) => void;
+  deleteFolder: (id: string) => Promise<void>;
   moveFolder: (id: string, parentId: string | null) => Promise<void>;
   renameFolder: (id: string, name: string) => Promise<void>;
 
@@ -170,10 +170,19 @@ const useTlDrawStore = create<TlDrawStore>((set, get) => ({
     }));
   },
 
-  deleteFolder: (id) => {
-    set((state) => ({
-      folders: state.folders.filter((folder) => folder.id !== id),
-    }));
+  deleteFolder: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await apiCall({ DeleteFolder: id });
+      set((state) => ({
+        folders: state.folders.filter((folder) => folder.id !== id),
+      }));
+    } catch (error) {
+      set({ error: 'Failed to delete folder' });
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
   moveFolder: async (id, parentId) => {

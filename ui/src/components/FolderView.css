@@ -69,7 +69,7 @@
   border-radius: 8px;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow);
-  width: 100%;
+  width: calc(100% - var(--folder-indent, 0px));
   box-sizing: border-box;
   min-width: 0;
 }
@@ -78,18 +78,8 @@
   padding: 12px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
   border-bottom: 1px solid var(--border-color);
-}
-
-.folder-header span {
-  flex: 1;
-  cursor: move;
-  color: var(--text-primary);
-  font-weight: 500;
-  user-select: none;
-  touch-action: none;
-  -webkit-touch-callout: none;
 }
 
 .folder-contents {
@@ -139,7 +129,7 @@
   .folder-header span:active {
     background-color: var(--bg-tertiary);
   }
-  
+
   .actions {
     opacity: 1;
   }
@@ -160,11 +150,21 @@
   gap: 8px;
   opacity: 0;
   transition: opacity 0.2s ease;
+  flex-shrink: 0; /* Prevent actions from shrinking */
 }
 
 .folder:hover .actions,
-.note:hover .actions {
+.note:hover .actions,
+.folder:focus-within .actions,
+.note:focus-within .actions {
   opacity: 1;
+}
+
+/* Always show actions on mobile */
+@media (hover: none) {
+  .actions {
+    opacity: 1;
+  }
 }
 
 .actions button {
@@ -201,4 +201,83 @@
 .icon-button:hover {
   background: var(--accent-primary);
   color: white;
+}
+
+/* Inline editing styles */
+.inline-edit {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: inherit;
+  font-family: inherit;
+  outline: none;
+}
+
+/* Folder expand/collapse styles */
+.folder-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.folder-icon {
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0; /* Prevent icon from shrinking */
+}
+
+
+.folder-text {
+  flex: 1;
+}
+
+.folder.collapsed .folder-contents {
+  display: none;
+}
+
+.folder.collapsed .folder-header {
+  border-bottom: none;
+}
+
+/* Note item styles */
+.note-icon {
+  font-size: 18px;
+}
+
+.note-text {
+  flex: 1;
+}
+
+/* Draggable text styles */
+.folder-text[draggable="true"],
+.note-text {
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+/* Mobile drag indicator */
+.note.dragging,
+.folder-text.dragging {
+  opacity: 0.5;
+  transform: scale(1.05);
+}
+
+/* Touch feedback for mobile */
+@media (hover: none) {
+  .folder-icon:active {
+    transform: scale(0.95);
+  }
+
+  .note-text:active {
+    opacity: 0.7;
+  }
 }

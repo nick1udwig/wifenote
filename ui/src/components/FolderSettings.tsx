@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
-import { TlDrawNote } from '../types/TlDraw';
+import { TlDrawNote, ImportRequest } from '../types/TlDraw';
 import './SettingsPane.css';
 
 const BASE_URL = import.meta.env.BASE_URL;
@@ -19,6 +19,7 @@ interface FolderSettingsProps {
 const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated }) => {
   const [pendingInvites, setPendingInvites] = useState<Invite[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState(() => {
     const override = localStorage.getItem('darkMode');
@@ -63,6 +64,69 @@ const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated 
     } catch (error) {
       console.error('Failed to fetch invites:', error);
       setError('Failed to fetch invites');
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: JSON.stringify({ ExportAll: null }),
+      });
+
+      if (!response.ok) throw new Error('Failed to export');
+
+      const data = await response.json();
+      if (!data.ExportAll?.Ok) {
+        throw new Error('Export failed: ' + (data.ExportAll?.Err || 'Unknown error'));
+      }
+
+      // Create a Uint8Array from the compressed data
+      const compressedData = new Uint8Array(data.ExportAll.Ok);
+      const blob = new Blob([compressedData], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'wifenote-export.json.gz';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to export');
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const compressedData = await file.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(compressedData));
+
+      const request: ImportRequest = { ImportAll: bytes };
+
+      const response = await fetch(`${BASE_URL}/api`, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      });
+
+      const result = await response.json();
+      if (result.ImportAll?.Err) {
+        throw new Error('Import failed: ' + result.ImportAll.Err);
+      }
+
+      if (!response.ok) throw new Error('Failed to import');
+      event.target.value = '';
+
+      // Refresh the structure after import
+      onNoteUpdated({} as TlDrawNote);
+    } catch (error) {
+      console.error('Import failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to import file');
     }
   };
 
@@ -140,6 +204,27 @@ const FolderSettings: React.FC<FolderSettingsProps> = ({ onClose, onNoteUpdated 
           {pendingInvites.length === 0 && (
             <div className="no-invites">No pending invites</div>
           )}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Data Management</h3>
+        <div className="data-management-buttons">
+          <button onClick={handleExport} className="export-button">
+            <span className="material-icons">upload</span>
+            Export All Data
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className="import-button">
+            <span className="material-icons">download</span>
+            Import Data
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json.gz,.json"
+            style={{ display: 'none' }}
+            onChange={handleImport}
+          />
         </div>
       </div>
     </div>

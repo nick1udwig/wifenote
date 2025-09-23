@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { TlDrawNote } from '../types/TlDraw';
 import './TldrawView.css';
 import {
@@ -28,22 +28,61 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
   const currentNoteToUse = note || currentNote;
   const [editor, setEditor] = useState<Editor | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const pendingSaveRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Save immediately function
+  const saveNow = useCallback(() => {
+    if (!editor || !currentNoteToUse || readOnly) return;
+
+    const snapshot = getSnapshot(editor.store);
+    console.log('Saving snapshot immediately:', snapshot);
+
+    const contentBytes = Array.from(new TextEncoder().encode(JSON.stringify(snapshot)));
+    const request: UpdateNoteContentRequest = {
+      UpdateNoteContent: [currentNoteToUse.id, contentBytes]
+    };
+
+    fetch(`${BASE_URL}/api`, {
+      method: 'POST',
+      body: JSON.stringify(request),
+    })
+    .then(response => response.json())
+    .then(result => console.log('Save result:', result))
+    .catch(error => console.error('Save failed:', error));
+  }, [editor, currentNoteToUse, readOnly]);
+
+  // Handle back button click
+  const handleBackClick = useCallback(() => {
+    // Clear any pending save timeout
+    if (pendingSaveRef.current) {
+      clearTimeout(pendingSaveRef.current);
+      pendingSaveRef.current = null;
+    }
+    // Save immediately before leaving
+    saveNow();
+    // Navigate away
+    if (onEdit) {
+      onEdit();
+    } else {
+      setView('folder');
+    }
+  }, [saveNow, onEdit, setView]);
 
   // Custom TopZone component
   const CustomTopZone = useCallback(() => {
     if (readOnly) return null;
-    
+
     return (
       <div className="custom-top-zone">
-        <button 
-          onClick={() => onEdit ? onEdit() : setView('folder')}
+        <button
+          onClick={handleBackClick}
           className="back-button"
         >
           ← Back to Folders
         </button>
         {currentNoteToUse && (
-          <button 
-            onClick={() => setShowSettings(true)} 
+          <button
+            onClick={() => setShowSettings(true)}
             title="Settings"
             className="settings-button"
           >
@@ -52,7 +91,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
         )}
       </div>
     );
-  }, [readOnly, onEdit, setView, currentNoteToUse, setShowSettings]);
+  }, [readOnly, handleBackClick, currentNoteToUse, setShowSettings]);
 
   const components: TLComponents = {
     TopPanel: CustomTopZone,
@@ -102,7 +141,7 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
     loadContent();
   }, [currentNoteToUse?.id, editor]);
 
-  // Save changes to backend
+  // Save changes to backend with debounce
   useEffect(() => {
     if (!editor || !currentNoteToUse || readOnly) return;
 
@@ -110,28 +149,32 @@ const TldrawView: React.FC<TldrawViewProps> = ({ note, readOnly = false, onEdit 
       ((update: any) => {
         if (update.source === 'user') {
           console.log('Store update from user:', update);
-          const snapshot = getSnapshot(editor.store);
-          console.log('Saving snapshot:', snapshot);
 
-          const contentBytes = Array.from(new TextEncoder().encode(JSON.stringify(snapshot)));
-          const request: UpdateNoteContentRequest = {
-            UpdateNoteContent: [currentNoteToUse.id, contentBytes]
-          };
+          // Clear existing timeout if any
+          if (pendingSaveRef.current) {
+            clearTimeout(pendingSaveRef.current);
+          }
 
-          fetch(`${BASE_URL}/api`, {
-            method: 'POST',
-            body: JSON.stringify(request),
-          })
-          .then(response => response.json())
-          .then(result => console.log('Save result:', result))
-          .catch(error => console.error('Save failed:', error));
+          // Set new timeout for 1 second
+          pendingSaveRef.current = setTimeout(() => {
+            saveNow();
+            pendingSaveRef.current = null;
+          }, 1000);
         }
       }) as StoreListener<any>,
       { source: 'user', scope: 'document' }
     );
 
-    return () => unlisten();
-  }, [editor, currentNoteToUse, readOnly]);
+    return () => {
+      // Clean up timeout on unmount
+      if (pendingSaveRef.current) {
+        clearTimeout(pendingSaveRef.current);
+        // Save immediately on unmount
+        saveNow();
+      }
+      unlisten();
+    };
+  }, [editor, currentNoteToUse, readOnly, saveNow]);
 
   // Handle UI events (tool changes etc)
   const handleChange: TLUiEventHandler = useCallback((name: string) => {

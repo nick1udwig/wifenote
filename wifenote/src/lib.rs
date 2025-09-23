@@ -5,9 +5,9 @@ use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use serde::{Deserialize, Serialize};
 
 use crate::hyperware::process::wifenote::{
-    Folder, Invite, Note, Request as NoteRequest, Response as NoteResponse,
+    Folder, Invite, Note, NoteType, Request as NoteRequest, Response as NoteResponse,
 };
-use hyperware_process_lib::logging::{debug, error, info, init_logging, Level};
+use hyperware_process_lib::logging::{error, info, init_logging, Level};
 use hyperware_process_lib::{
     await_message, call_init, http, http::server::HttpServerRequest, last_blob, our, vfs, Address,
     LazyLoadBlob, Message, Response,
@@ -21,15 +21,23 @@ wit_bindgen::generate!({
 });
 
 // Current version of the state format
-const CURRENT_STATE_VERSION: u32 = 0;
+const CURRENT_STATE_VERSION: u32 = 1;
 
 const ICON: &str = include_str!("./icon");
+
+// Version 0: Original format with full notes inline
+// Version 1: New format with note metadata only, content in separate files
+const STATE_VERSION_WITH_SEPARATE_FILES: u32 = 1;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct ExportData {
     version: u32,
     folders: Vec<Folder>,
-    notes: Vec<Note>,
+    #[serde(default)]
+    notes: Vec<Note>, // For backwards compatibility with v0
+    #[serde(default)]
+    note_metadata: Vec<NoteMetadata>, // For v1+
+    #[serde(default)]
     collaboration_invites: HashMap<String, HashMap<String, String>>,
 }
 
@@ -40,12 +48,36 @@ enum Msg {
     HttpRequest(HttpServerRequest),
 }
 
+// Note metadata stored in state.json (without content)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct NoteMetadata {
+    id: String,
+    name: String,
+    folder_id: Option<String>,
+    note_type: NoteType,
+    is_public: bool,
+    collaborators: Vec<String>,
+}
+
+impl From<Note> for NoteMetadata {
+    fn from(note: Note) -> Self {
+        NoteMetadata {
+            id: note.id,
+            name: note.name,
+            folder_id: note.folder_id,
+            note_type: note.note_type,
+            is_public: note.is_public,
+            collaborators: note.collaborators,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct State {
     drive: String,
     folders: HashMap<String, Folder>,
-    notes: HashMap<String, Note>,
-    root_items: HashSet<String>, // IDs of folders/notes at root
+    notes: HashMap<String, NoteMetadata>, // Now stores metadata only
+    root_items: HashSet<String>,          // IDs of folders/notes at root
     collaboration_invites: HashMap<String, HashMap<String, String>>, // note_id -> {invitee_id -> inviter_id}
 }
 
@@ -58,6 +90,67 @@ impl State {
             root_items: HashSet::new(),
             collaboration_invites: HashMap::new(),
         }
+    }
+
+    // Get the file extension for a note based on its type
+    fn get_note_extension(note_type: &NoteType) -> &'static str {
+        match note_type {
+            NoteType::Markdown => "md",
+            NoteType::Tldraw => "json",
+        }
+    }
+
+    // Load note content from individual file
+    fn load_note_content(&self, note_id: &str) -> anyhow::Result<Vec<u8>> {
+        let metadata = self
+            .notes
+            .get(note_id)
+            .ok_or_else(|| anyhow::anyhow!("Note metadata not found"))?;
+        let ext = Self::get_note_extension(&metadata.note_type);
+        let path = format!("{}/note_{}.{}", &self.drive, note_id, ext);
+        let file = vfs::open_file(&path, false, None)?;
+        Ok(file.read()?)
+    }
+
+    // Save note content to individual file
+    fn save_note_content(&self, note_id: &str, content: &[u8]) -> anyhow::Result<()> {
+        let metadata = self
+            .notes
+            .get(note_id)
+            .ok_or_else(|| anyhow::anyhow!("Note metadata not found"))?;
+        let ext = Self::get_note_extension(&metadata.note_type);
+        let path = format!("{}/note_{}.{}", &self.drive, note_id, ext);
+        let file = vfs::create_file(&path, None)?;
+
+        // For markdown files, ensure they end with a newline
+        if metadata.note_type == NoteType::Markdown
+            && !content.is_empty()
+            && !content.ends_with(b"\n")
+        {
+            let mut content_with_newline = content.to_vec();
+            content_with_newline.push(b'\n');
+            file.write(&content_with_newline)?;
+        } else {
+            file.write(content)?;
+        }
+
+        Ok(())
+    }
+
+    // Get full Note from NoteMetadata by loading content
+    fn get_full_note(&self, metadata: &NoteMetadata) -> anyhow::Result<Note> {
+        let content = self
+            .load_note_content(&metadata.id)
+            .unwrap_or_else(|_| Vec::new());
+        Ok(Note {
+            id: metadata.id.clone(),
+            name: metadata.name.clone(),
+            folder_id: metadata.folder_id.clone(),
+            note_type: metadata.note_type.clone(),
+            content,
+            is_public: metadata.is_public,
+            collaborators: metadata.collaborators.clone(),
+        })
     }
 
     // Helper to generate a unique ID
@@ -74,7 +167,8 @@ impl State {
         let data = serde_json::to_vec(&ExportData {
             version: CURRENT_STATE_VERSION,
             folders: self.folders.values().cloned().collect(),
-            notes: self.notes.values().cloned().collect(),
+            notes: Vec::new(), // No longer store full notes in v1+
+            note_metadata: self.notes.values().cloned().collect(),
             collaboration_invites: self.collaboration_invites.clone(),
         })?;
 
@@ -91,7 +185,7 @@ impl State {
 
         let data = file.read()?;
         let export_data: ExportData = serde_json::from_slice(&data)?;
-        let export_data = migrate_export_data(export_data)?;
+        let export_data = migrate_export_data(export_data, &drive)?;
         let mut state = State::new(drive);
 
         // Reconstruct shared state
@@ -105,11 +199,24 @@ impl State {
             state.folders.insert(folder.id.clone(), folder);
         }
 
-        for note in export_data.notes {
-            if note.folder_id.is_none() {
-                state.root_items.insert(note.id.clone());
+        // Load note metadata (v1+) or migrate from full notes (v0)
+        if !export_data.note_metadata.is_empty() {
+            // Version 1+: Load from metadata
+            for metadata in export_data.note_metadata {
+                if metadata.folder_id.is_none() {
+                    state.root_items.insert(metadata.id.clone());
+                }
+                state.notes.insert(metadata.id.clone(), metadata);
             }
-            state.notes.insert(note.id.clone(), note);
+        } else if !export_data.notes.is_empty() {
+            // Version 0: Migrate from full notes (this shouldn't happen after migration)
+            for note in export_data.notes {
+                if note.folder_id.is_none() {
+                    state.root_items.insert(note.id.clone());
+                }
+                let metadata = NoteMetadata::from(note);
+                state.notes.insert(metadata.id.clone(), metadata);
+            }
         }
 
         Ok(state)
@@ -117,7 +224,7 @@ impl State {
 }
 
 // Helper function to migrate state data from older versions
-fn migrate_export_data(mut data: ExportData) -> anyhow::Result<ExportData> {
+fn migrate_export_data(mut data: ExportData, drive: &str) -> anyhow::Result<ExportData> {
     // Return error if version is newer than current
     if data.version > CURRENT_STATE_VERSION {
         return Err(anyhow::anyhow!(
@@ -128,18 +235,46 @@ fn migrate_export_data(mut data: ExportData) -> anyhow::Result<ExportData> {
     }
 
     // Apply migrations sequentially based on version
-    // (no migrations yet since this is the first version)
-    /*
-    if data.version < 1 {
-        // migrate from 0 to 1
-        data.version = 1;
+    if data.version < STATE_VERSION_WITH_SEPARATE_FILES {
+        // Migrate from v0 to v1: Extract note contents to separate files
+        info!(
+            "Migrating state from version {} to {}",
+            data.version, STATE_VERSION_WITH_SEPARATE_FILES
+        );
+
+        // Convert full notes to metadata and save content separately
+        let mut note_metadata = Vec::new();
+        for note in data.notes.iter() {
+            // Save note content to individual file with appropriate extension
+            let ext = match note.note_type {
+                NoteType::Markdown => "md",
+                NoteType::Tldraw => "json",
+            };
+            let path = format!("{}/note_{}.{}", drive, note.id, ext);
+            if let Ok(file) = vfs::create_file(&path, None) {
+                if let Err(e) = file.write(&note.content) {
+                    error!(
+                        "Failed to write note content during migration for note {}: {}",
+                        note.id, e
+                    );
+                }
+            }
+
+            // Create metadata
+            note_metadata.push(NoteMetadata {
+                id: note.id.clone(),
+                name: note.name.clone(),
+                folder_id: note.folder_id.clone(),
+                note_type: note.note_type.clone(),
+                is_public: note.is_public,
+                collaborators: note.collaborators.clone(),
+            });
+        }
+
+        data.note_metadata = note_metadata;
+        data.notes = Vec::new(); // Clear old format notes
+        data.version = STATE_VERSION_WITH_SEPARATE_FILES;
     }
-    if data.version < 2 {
-        // migrate from 1 to 2
-        data.version = 2;
-    }
-    etc.
-    */
 
     data.version = CURRENT_STATE_VERSION;
     Ok(data)
@@ -163,10 +298,10 @@ fn handle_http_request(
         } => server.handle_websocket_open(path, channel_id),
         HttpServerRequest::WebSocketClose(channel_id) => server.handle_websocket_close(channel_id),
         HttpServerRequest::Http(http_request) => {
-            debug!("http: a");
+            info!("http: a");
             match http_request.method()? {
                 http::Method::GET => {
-                    debug!("http: GET");
+                    info!("http: GET");
 
                     // Handle public note access through public server
                     if is_public {
@@ -176,17 +311,16 @@ fn handle_http_request(
                             headers
                                 .insert("Content-Type".to_string(), "application/json".to_string());
 
-                            let result = if let Some(note) = state.notes.get(note_id) {
-                                if note.is_public {
-                                    Ok(Note {
-                                        id: note.id.clone(),
-                                        name: note.name.clone(),
-                                        folder_id: None, // Don't expose folder structure
-                                        content: note.content.clone(),
-                                        note_type: note.note_type.clone(),
-                                        is_public: true,
-                                        collaborators: Vec::new(), // Don't expose collaborators
-                                    })
+                            let result = if let Some(metadata) = state.notes.get(note_id) {
+                                if metadata.is_public {
+                                    match state.get_full_note(metadata) {
+                                        Ok(mut note) => {
+                                            note.folder_id = None; // Don't expose folder structure
+                                            note.collaborators = Vec::new(); // Don't expose collaborators
+                                            Ok(note)
+                                        }
+                                        Err(_) => Err("Error loading note content".to_string()),
+                                    }
                                 } else {
                                     Err("Note is not public".to_string())
                                 }
@@ -264,17 +398,16 @@ fn handle_http_request(
                             headers
                                 .insert("Content-Type".to_string(), "application/json".to_string());
 
-                            let result = if let Some(note) = state.notes.get(note_id) {
-                                if note.is_public {
-                                    Ok(Note {
-                                        id: note.id.clone(),
-                                        name: note.name.clone(),
-                                        folder_id: None, // Don't expose folder structure
-                                        content: note.content.clone(),
-                                        note_type: note.note_type.clone(),
-                                        is_public: true,
-                                        collaborators: Vec::new(), // Don't expose collaborators
-                                    })
+                            let result = if let Some(metadata) = state.notes.get(note_id) {
+                                if metadata.is_public {
+                                    match state.get_full_note(metadata) {
+                                        Ok(mut note) => {
+                                            note.folder_id = None; // Don't expose folder structure
+                                            note.collaborators = Vec::new(); // Don't expose collaborators
+                                            Ok(note)
+                                        }
+                                        Err(_) => Err("Error loading note content".to_string()),
+                                    }
                                 } else {
                                     Err("Note is not public".to_string())
                                 }
@@ -307,13 +440,17 @@ fn handle_http_request(
                         );
                         return Ok(());
                     }
-                    debug!("http: POST");
+                    info!("http: POST");
                     let Some(body) = last_blob() else {
                         return Err(anyhow::anyhow!(
                             "received a POST HTTP request with no body, skipping"
                         ));
                     };
-                    debug!("http: POST trying to into note");
+                    info!(
+                        "http: POST trying to into note {:?}",
+                        String::from_utf8(body.bytes.clone())
+                            .map(|s| s.chars().take(10).collect::<String>())
+                    );
                     let resp = handle_note_request(body.bytes.try_into()?, Some(&our()), state)?;
                     http::server::send_response(http::StatusCode::OK, None, resp.into());
                 }
@@ -332,7 +469,6 @@ fn handle_note_request(
     source: Option<&Address>,
     state: &mut State,
 ) -> anyhow::Result<NoteResponse> {
-    debug!("note: {:?}", req);
     let resp = 'resp: {
         match req {
             NoteRequest::CreateFolder((name, parent)) => {
@@ -425,39 +561,65 @@ fn handle_note_request(
                 }
 
                 let id = State::generate_id();
-                let note = Note {
+                let metadata = NoteMetadata {
                     id: id.clone(),
-                    name,
+                    name: name.clone(),
                     folder_id: folder_id.clone(),
-                    note_type,
-                    content: vec![], // Empty content
+                    note_type: note_type.clone(),
                     is_public: false,
                     collaborators: Vec::new(),
                 };
 
-                state.notes.insert(id.clone(), note.clone());
+                // Insert metadata first so save_note_content can access it
+                state.notes.insert(id.clone(), metadata);
+
+                // Save empty content to file
+                state.save_note_content(&id, &vec![])?;
                 if folder_id.is_none() {
-                    state.root_items.insert(id);
+                    state.root_items.insert(id.clone());
                 }
 
                 state.save_to_disk()?;
+
+                // Return full Note for API compatibility
+                let note = Note {
+                    id,
+                    name,
+                    folder_id,
+                    note_type,
+                    content: vec![],
+                    is_public: false,
+                    collaborators: Vec::new(),
+                };
                 NoteResponse::CreateNote(Ok(note))
             }
 
             NoteRequest::RenameNote((id, new_name)) => {
-                if let Some(mut note) = state.notes.get(&id).cloned() {
-                    note.name = new_name;
-                    state.notes.insert(id, note.clone());
+                if let Some(mut metadata) = state.notes.get(&id).cloned() {
+                    metadata.name = new_name;
+                    state.notes.insert(id.clone(), metadata.clone());
                     state.save_to_disk()?;
-                    NoteResponse::RenameNote(Ok(note))
+                    // Return full Note for API compatibility
+                    match state.get_full_note(&metadata) {
+                        Ok(note) => NoteResponse::RenameNote(Ok(note)),
+                        Err(_) => {
+                            NoteResponse::RenameNote(Err("Error loading note content".to_string()))
+                        }
+                    }
                 } else {
                     NoteResponse::RenameNote(Err("Note not found".to_string()))
                 }
             }
 
             NoteRequest::DeleteNote(id) => {
-                if let Some(_) = state.notes.remove(&id) {
+                if let Some(metadata) = state.notes.remove(&id) {
                     state.root_items.remove(&id);
+                    // Delete the note content file with correct extension
+                    let ext = State::get_note_extension(&metadata.note_type);
+                    let path = format!("{}/note_{}.{}", &state.drive, &id, ext);
+                    if let Err(e) = vfs::remove_file(&path, None) {
+                        error!("Failed to delete note content file for {}: {}", &id, e);
+                    }
                     state.save_to_disk()?;
                     NoteResponse::DeleteNote(Ok(()))
                 } else {
@@ -475,19 +637,25 @@ fn handle_note_request(
                     }
                 }
 
-                if let Some(mut note) = state.notes.get(&id).cloned() {
+                if let Some(mut metadata) = state.notes.get(&id).cloned() {
                     // Update root items tracking
-                    if note.folder_id.is_none() {
+                    if metadata.folder_id.is_none() {
                         state.root_items.remove(&id);
                     }
                     if new_folder_id.is_none() {
                         state.root_items.insert(id.clone());
                     }
 
-                    note.folder_id = new_folder_id;
-                    state.notes.insert(id, note.clone());
+                    metadata.folder_id = new_folder_id;
+                    state.notes.insert(id.clone(), metadata.clone());
                     state.save_to_disk()?;
-                    NoteResponse::MoveNote(Ok(note))
+                    // Return full Note for API compatibility
+                    match state.get_full_note(&metadata) {
+                        Ok(note) => NoteResponse::MoveNote(Ok(note)),
+                        Err(_) => {
+                            NoteResponse::MoveNote(Err("Error loading note content".to_string()))
+                        }
+                    }
                 } else {
                     NoteResponse::MoveNote(Err("Note not found".to_string()))
                 }
@@ -498,28 +666,40 @@ fn handle_note_request(
                 // 1. Note is public
                 // 2. Current node is owner (checking against process name should be enough)
                 // 3. Current node is a collaborator
-                let Some(note) = state.notes.get(&id) else {
+                let Some(metadata) = state.notes.get(&id) else {
                     break 'resp NoteResponse::GetNote(Err(
                         "Not found or not authorized".to_string()
                     ));
                 };
-                if note.is_public {
-                    break 'resp NoteResponse::GetNote(Ok(note.clone()));
+                if metadata.is_public {
+                    match state.get_full_note(metadata) {
+                        Ok(note) => break 'resp NoteResponse::GetNote(Ok(note)),
+                        Err(_) => {
+                            break 'resp NoteResponse::GetNote(Err(
+                                "Error loading note content".to_string()
+                            ))
+                        }
+                    }
                 }
                 let Some(source) = source else {
                     break 'resp NoteResponse::GetNote(Err(
                         "Not found or not authorized".to_string()
                     ));
                 };
-                if source == &our() || note.collaborators.contains(&source.node) {
-                    NoteResponse::GetNote(Ok(note.clone()))
+                if source == &our() || metadata.collaborators.contains(&source.node) {
+                    match state.get_full_note(metadata) {
+                        Ok(note) => NoteResponse::GetNote(Ok(note)),
+                        Err(_) => {
+                            NoteResponse::GetNote(Err("Error loading note content".to_string()))
+                        }
+                    }
                 } else {
                     NoteResponse::GetNote(Err("Not found or not authorized".to_string()))
                 }
             }
 
             NoteRequest::UpdateNoteContent((id, content)) => {
-                let Some(mut note) = state.notes.get(&id).cloned() else {
+                let Some(metadata) = state.notes.get(&id).cloned() else {
                     break 'resp NoteResponse::UpdateNoteContent(Err(
                         "Not found or not authorized".to_string(),
                     ));
@@ -529,27 +709,66 @@ fn handle_note_request(
                         "Not found or not authorized".to_string(),
                     ));
                 };
-                if source == &our() || note.collaborators.contains(&source.node) {
-                    note.content = content;
-                    state.notes.insert(id, note);
-                    state.save_to_disk()?;
+                if source == &our() || metadata.collaborators.contains(&source.node) {
+                    // Save content to file with appropriate extension
+                    state.save_note_content(&id, &content)?;
+                    // No need to update metadata or save state since content is stored separately
                     NoteResponse::UpdateNoteContent(Ok(()))
                 } else {
                     NoteResponse::UpdateNoteContent(Err("Not found or not authorized".to_string()))
                 }
             }
 
-            NoteRequest::GetStructure => NoteResponse::GetStructure(Ok((
-                state.folders.values().cloned().collect(),
-                state.notes.values().cloned().collect(),
-            ))),
+            NoteRequest::GetStructure => {
+                // Convert metadata to full notes for API compatibility
+                let mut notes = Vec::new();
+                for metadata in state.notes.values() {
+                    match state.get_full_note(metadata) {
+                        Ok(note) => notes.push(note),
+                        Err(_) => {
+                            // If we can't load content, create note with empty content
+                            notes.push(Note {
+                                id: metadata.id.clone(),
+                                name: metadata.name.clone(),
+                                folder_id: metadata.folder_id.clone(),
+                                note_type: metadata.note_type.clone(),
+                                content: vec![],
+                                is_public: metadata.is_public,
+                                collaborators: metadata.collaborators.clone(),
+                            });
+                        }
+                    }
+                }
+                NoteResponse::GetStructure(Ok((state.folders.values().cloned().collect(), notes)))
+            }
 
             NoteRequest::ExportAll => {
-                // Create export data structure
+                // Load all notes with content for export
+                let mut notes = Vec::new();
+                for metadata in state.notes.values() {
+                    match state.get_full_note(metadata) {
+                        Ok(note) => notes.push(note),
+                        Err(_) => {
+                            // If we can't load content, create note with empty content
+                            notes.push(Note {
+                                id: metadata.id.clone(),
+                                name: metadata.name.clone(),
+                                folder_id: metadata.folder_id.clone(),
+                                note_type: metadata.note_type.clone(),
+                                content: vec![],
+                                is_public: metadata.is_public,
+                                collaborators: metadata.collaborators.clone(),
+                            });
+                        }
+                    }
+                }
+
+                // Create export data structure with full notes for compatibility
                 let export_data = ExportData {
-                    version: CURRENT_STATE_VERSION,
+                    version: 0, // Export as v0 for compatibility
                     folders: state.folders.values().cloned().collect(),
-                    notes: state.notes.values().cloned().collect(),
+                    notes, // Full notes for export
+                    note_metadata: Vec::new(),
                     collaboration_invites: state.collaboration_invites.clone(),
                 };
 
@@ -566,18 +785,24 @@ fn handle_note_request(
             }
 
             NoteRequest::SetNotePublic((note_id, is_public)) => {
-                if let Some(mut note) = state.notes.get(&note_id).cloned() {
-                    note.is_public = is_public;
-                    state.notes.insert(note_id, note.clone());
+                if let Some(mut metadata) = state.notes.get(&note_id).cloned() {
+                    metadata.is_public = is_public;
+                    state.notes.insert(note_id.clone(), metadata.clone());
                     state.save_to_disk()?;
-                    NoteResponse::SetNotePublic(Ok(note))
+                    // Return full Note for API compatibility
+                    match state.get_full_note(&metadata) {
+                        Ok(note) => NoteResponse::SetNotePublic(Ok(note)),
+                        Err(_) => NoteResponse::SetNotePublic(Err(
+                            "Error loading note content".to_string()
+                        )),
+                    }
                 } else {
                     NoteResponse::SetNotePublic(Err("Note not found".to_string()))
                 }
             }
 
             NoteRequest::InviteCollaborator((note_id, node_id)) => {
-                if let Some(note) = state.notes.get(&note_id) {
+                if let Some(metadata) = state.notes.get(&note_id) {
                     // Create invites map for this note if it doesn't exist
                     let invites = state
                         .collaboration_invites
@@ -588,17 +813,23 @@ fn handle_note_request(
                     invites.insert(node_id.clone(), our().node);
 
                     state.save_to_disk()?;
-                    NoteResponse::InviteCollaborator(Ok(note.clone()))
+                    // Return full Note for API compatibility
+                    match state.get_full_note(metadata) {
+                        Ok(note) => NoteResponse::InviteCollaborator(Ok(note)),
+                        Err(_) => NoteResponse::InviteCollaborator(Err(
+                            "Error loading note content".to_string(),
+                        )),
+                    }
                 } else {
                     NoteResponse::InviteCollaborator(Err("Note not found".to_string()))
                 }
             }
 
             NoteRequest::RemoveCollaborator((note_id, node_id)) => {
-                if let Some(mut note) = state.notes.get(&note_id).cloned() {
+                if let Some(mut metadata) = state.notes.get(&note_id).cloned() {
                     // Remove from collaborators if present
-                    note.collaborators.retain(|id| id != &node_id);
-                    state.notes.insert(note_id.clone(), note.clone());
+                    metadata.collaborators.retain(|id| id != &node_id);
+                    state.notes.insert(note_id.clone(), metadata.clone());
 
                     // Remove any pending invites
                     if let Some(invites) = state.collaboration_invites.get_mut(&note_id) {
@@ -606,7 +837,13 @@ fn handle_note_request(
                     }
 
                     state.save_to_disk()?;
-                    NoteResponse::RemoveCollaborator(Ok(note))
+                    // Return full Note for API compatibility
+                    match state.get_full_note(&metadata) {
+                        Ok(note) => NoteResponse::RemoveCollaborator(Ok(note)),
+                        Err(_) => NoteResponse::RemoveCollaborator(Err(
+                            "Error loading note content".to_string(),
+                        )),
+                    }
                 } else {
                     NoteResponse::RemoveCollaborator(Err("Note not found".to_string()))
                 }
@@ -616,16 +853,22 @@ fn handle_note_request(
                 // Verify invite exists
                 if let Some(invites) = state.collaboration_invites.get_mut(&note_id) {
                     if invites.get(&our().node) == Some(&inviter_node_id) {
-                        if let Some(mut note) = state.notes.get(&note_id).cloned() {
+                        if let Some(mut metadata) = state.notes.get(&note_id).cloned() {
                             // Add to collaborators
-                            note.collaborators.push(our().node);
-                            state.notes.insert(note_id.clone(), note.clone());
+                            metadata.collaborators.push(our().node);
+                            state.notes.insert(note_id.clone(), metadata.clone());
 
                             // Remove invite
                             invites.remove(&our().node);
 
                             state.save_to_disk()?;
-                            NoteResponse::AcceptInvite(Ok(note))
+                            // Return full Note for API compatibility
+                            match state.get_full_note(&metadata) {
+                                Ok(note) => NoteResponse::AcceptInvite(Ok(note)),
+                                Err(_) => NoteResponse::AcceptInvite(Err(
+                                    "Error loading note content".to_string(),
+                                )),
+                            }
                         } else {
                             NoteResponse::AcceptInvite(Err("Note not found".to_string()))
                         }
@@ -657,11 +900,11 @@ fn handle_note_request(
                 for (note_id, note_invites) in &state.collaboration_invites {
                     for (invitee_id, inviter_id) in note_invites {
                         if invitee_id == &our().node {
-                            if let Some(note) = state.notes.get(note_id) {
+                            if let Some(metadata) = state.notes.get(note_id) {
                                 invites.push(Invite {
                                     note_id: note_id.clone(),
                                     inviter_node_id: inviter_id.clone(),
-                                    note_name: note.name.clone(),
+                                    note_name: metadata.name.clone(),
                                 });
                             }
                         }
@@ -686,7 +929,7 @@ fn handle_note_request(
 
                 // Parse and migrate the JSON
                 let import_data: ExportData = match serde_json::from_str(&decompressed) {
-                    Ok(data) => match migrate_export_data(data) {
+                    Ok(data) => match migrate_export_data(data, &state.drive) {
                         Ok(migrated) => migrated,
                         Err(e) => return Ok(NoteResponse::ImportAll(Err(e.to_string()))),
                     },
@@ -700,18 +943,38 @@ fn handle_note_request(
 
                 // Update state
                 let mut new_state = state.clone();
+                new_state.collaboration_invites = import_data.collaboration_invites;
+
                 for folder in import_data.folders {
                     if folder.parent_id.is_none() {
                         new_state.root_items.insert(folder.id.clone());
                     }
                     new_state.folders.insert(folder.id.clone(), folder);
                 }
-                for note in import_data.notes {
-                    if note.folder_id.is_none() {
-                        new_state.root_items.insert(note.id.clone());
+
+                // Handle both old format (full notes) and new format (metadata)
+                if !import_data.notes.is_empty() {
+                    // Old format: save notes as files and create metadata
+                    for note in import_data.notes {
+                        if note.folder_id.is_none() {
+                            new_state.root_items.insert(note.id.clone());
+                        }
+                        // Create and store metadata first
+                        let metadata = NoteMetadata::from(note.clone());
+                        new_state.notes.insert(metadata.id.clone(), metadata);
+                        // Then save content to file with appropriate extension
+                        new_state.save_note_content(&note.id, &note.content)?;
                     }
-                    new_state.notes.insert(note.id.clone(), note);
+                } else if !import_data.note_metadata.is_empty() {
+                    // New format: already have metadata
+                    for metadata in import_data.note_metadata {
+                        if metadata.folder_id.is_none() {
+                            new_state.root_items.insert(metadata.id.clone());
+                        }
+                        new_state.notes.insert(metadata.id.clone(), metadata);
+                    }
                 }
+
                 *state = new_state;
                 state.save_to_disk()?;
                 NoteResponse::ImportAll(Ok(()))
@@ -726,13 +989,40 @@ fn handle_message(
     state: &mut State,
     server: &mut http::server::HttpServer,
 ) -> anyhow::Result<()> {
-    match message.body().try_into()? {
-        Msg::NoteRequest(req) => {
+    match message.body().try_into() {
+        Ok(Msg::NoteRequest(req)) => {
             let resp = handle_note_request(req, Some(message.source()), state)?;
             Response::new().body(resp).send()?;
         }
-        Msg::HttpRequest(req) => handle_http_request(req, state, server)?,
+        Ok(Msg::HttpRequest(req)) => handle_http_request(req, state, server)?,
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "Failed to parse message: {:?}; error: {}",
+                String::from_utf8(message.body().to_vec()),
+                e
+            ))
+        }
     }
+    // Convert metadata to full notes for websocket updates
+    let mut notes = Vec::new();
+    for metadata in state.notes.values() {
+        match state.get_full_note(metadata) {
+            Ok(note) => notes.push(note),
+            Err(_) => {
+                // If we can't load content, create note with empty content
+                notes.push(Note {
+                    id: metadata.id.clone(),
+                    name: metadata.name.clone(),
+                    folder_id: metadata.folder_id.clone(),
+                    note_type: metadata.note_type.clone(),
+                    content: vec![],
+                    is_public: metadata.is_public,
+                    collaborators: metadata.collaborators.clone(),
+                });
+            }
+        }
+    }
+
     server.ws_push_all_channels(
         "/",
         http::server::WsMessageType::Text,
@@ -740,7 +1030,7 @@ fn handle_message(
             mime: None,
             bytes: NoteResponse::GetStructure(Ok((
                 state.folders.values().cloned().collect(),
-                state.notes.values().cloned().collect(),
+                notes,
             )))
             .into(),
         },
